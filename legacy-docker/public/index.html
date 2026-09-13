@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Tablero · Finanzas personales</title>
+    <link rel="stylesheet" href="styles.css?v=2">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%237C93FF'/><path d='M9 21V11m0 0l7 5 7-5v10' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+</head>
+<body>
+<div id="app" v-cloak>
+
+    <!-- ===== Sidebar ===== -->
+    <aside class="sidebar" :class="{ open: sidebarOpen }">
+        <div class="brand">
+            <span class="brand-mark">
+                <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M9 21V11m0 0l7 5 7-5v10" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <span class="brand-text">El Tablero<small>finanzas personales</small></span>
+        </div>
+
+        <nav class="nav">
+            <p class="nav-group">Finanzas</p>
+            <button v-for="item in nav" :key="item.id"
+                    class="nav-item" :class="{ active: currentView === item.id, disabled: item.soon }"
+                    @click="item.soon ? null : go(item.id)">
+                <icon :name="item.icon"></icon>
+                <span>{{ item.label }}</span>
+                <span v-if="item.soon" class="soon">pronto</span>
+                <span v-else-if="item.badge" class="nav-badge">{{ item.badge }}</span>
+            </button>
+        </nav>
+
+        <div class="sidebar-foot">
+            <div class="mini-rate">
+                <span class="dot bs"></span> BCV
+                <b class="mono">{{ rates.bcv ? fmt(rates.bcv) : '—' }}</b>
+            </div>
+            <div class="mini-rate">
+                <span class="dot usdt"></span> USDT
+                <b class="mono">{{ rates.usdt ? fmt(rates.usdt) : '—' }}</b>
+            </div>
+        </div>
+    </aside>
+    <div class="scrim" v-if="sidebarOpen" @click="sidebarOpen = false"></div>
+
+    <!-- ===== Main ===== -->
+    <div class="shell">
+        <!-- Topbar -->
+        <header class="topbar">
+            <button class="icon-btn only-mobile" @click="sidebarOpen = true" aria-label="Abrir menú">
+                <icon name="menu"></icon>
+            </button>
+            <div class="topbar-title">
+                <h1>{{ nav.find(n => n.id === currentView)?.label }}</h1>
+                <p>{{ pageSubtitle }}</p>
+            </div>
+            <div class="ticker">
+                <div class="tick">
+                    <span class="tick-label"><span class="dot bs"></span>BCV · Bs/$</span>
+                    <span class="mono tick-val">{{ rates.bcv ? fmt(rates.bcv) : '—' }}</span>
+                </div>
+                <div class="tick">
+                    <span class="tick-label"><span class="dot usdt"></span>USDT · Bs</span>
+                    <span class="mono tick-val">{{ rates.usdt ? fmt(rates.usdt) : '—' }}</span>
+                </div>
+                <button class="icon-btn" :class="{ spin: loadingRates }" @click="loadRates(true)" title="Actualizar tasas">
+                    <icon name="refresh"></icon>
+                </button>
+                <button class="icon-btn" @click="editRates" title="Ajustar tasas a mano">
+                    <icon name="edit"></icon>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <!-- ================= DASHBOARD ================= -->
+            <section v-show="currentView === 'dashboard'" class="view">
+                <div class="view-tools">
+                    <div class="seg">
+                        <span class="seg-label">Ver en</span>
+                        <button v-for="m in monedas" :key="m" class="seg-btn" :class="{ active: verMoneda === m }" @click="verMoneda = m">{{ m }}</button>
+                    </div>
+                </div>
+
+                <!-- KPIs -->
+                <div class="kpis">
+                    <article class="kpi pay">
+                        <span class="kpi-eyebrow">Por pagar</span>
+                        <span class="kpi-value mono">{{ sym }} {{ fmt(totals.pagar) }}</span>
+                        <span class="kpi-foot"><icon name="alert"></icon> {{ totals.vencidas }} vencida(s)</span>
+                    </article>
+                    <article class="kpi collect">
+                        <span class="kpi-eyebrow">Por cobrar</span>
+                        <span class="kpi-value mono">{{ sym }} {{ fmt(totals.cobrar) }}</span>
+                        <span class="kpi-foot">{{ countCobrar }} cuenta(s) a favor</span>
+                    </article>
+                    <article class="kpi" :class="totals.neto >= 0 ? 'good' : 'bad'">
+                        <span class="kpi-eyebrow">Balance neto</span>
+                        <span class="kpi-value mono">{{ sym }} {{ fmt(totals.neto) }}</span>
+                        <span class="kpi-foot">{{ totals.neto >= 0 ? 'A tu favor' : 'En contra' }}</span>
+                    </article>
+                    <article class="kpi soon-kpi">
+                        <span class="kpi-eyebrow">Próximo vencimiento</span>
+                        <span class="kpi-value mono" :class="{ 'txt-warn': nextDue && nextDue.dr <= 3 }">
+                            {{ nextDue ? (nextDue.dr < 0 ? 'Vencida' : nextDue.dr === 0 ? 'Hoy' : nextDue.dr + ' días') : '—' }}
+                        </span>
+                        <span class="kpi-foot">{{ nextDue ? nextDue.descripcion : 'Nada pendiente' }}</span>
+                    </article>
+                </div>
+
+                <div class="dash-grid">
+                    <!-- Donut deuda por moneda -->
+                    <article class="card">
+                        <div class="card-head">
+                            <h2>Distribución por moneda</h2>
+                            <span class="card-sub">Saldo pendiente por pagar, en {{ verMoneda }}</span>
+                        </div>
+                        <div class="donut-wrap" v-if="donut.total > 0">
+                            <svg class="donut" viewBox="0 0 42 42">
+                                <circle class="donut-track" cx="21" cy="21" r="15.915"></circle>
+                                <circle v-for="s in donut.segments" :key="s.label"
+                                        :stroke="s.color" :stroke-dasharray="s.dash + ' ' + (100 - s.dash)"
+                                        :stroke-dashoffset="s.offset" cx="21" cy="21" r="15.915"></circle>
+                                <text x="21" y="20" class="donut-total mono">{{ sym }}{{ fmtShort(donut.total) }}</text>
+                                <text x="21" y="25.5" class="donut-cap">total</text>
+                            </svg>
+                            <ul class="legend">
+                                <li v-for="s in donut.segments" :key="s.label">
+                                    <span class="dot" :style="{ background: s.color }"></span>
+                                    <span class="legend-label">{{ s.label }}</span>
+                                    <span class="mono legend-val">{{ sym }} {{ fmt(s.value) }}</span>
+                                    <span class="legend-pct">{{ Math.round(s.dash) }}%</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <p v-else class="empty">Sin deudas por pagar. Todo en orden.</p>
+                    </article>
+
+                    <!-- Próximos vencimientos -->
+                    <article class="card">
+                        <div class="card-head">
+                            <h2>Próximos vencimientos</h2>
+                            <span class="card-sub">Lo que debes pagar primero</span>
+                        </div>
+                        <ul class="due-list" v-if="proximos.length">
+                            <li v-for="d in proximos" :key="d.id" class="due-item" @click="go('deudas')">
+                                <span class="due-dot" :class="d.dr < 0 ? 'is-late' : d.dr <= 3 ? 'is-soon' : ''"></span>
+                                <span class="due-main">
+                                    <b>{{ d.descripcion }}</b>
+                                    <small>{{ d.contraparte || 'Sin contraparte' }}</small>
+                                </span>
+                                <span class="due-right">
+                                    <span class="mono" :style="{ color: curColor(d.moneda) }">{{ symOf(d.moneda) }} {{ fmt(d.monto - d.monto_abonado) }}</span>
+                                    <small :class="d.dr < 0 ? 'txt-late' : d.dr <= 3 ? 'txt-warn' : 'txt-muted'">
+                                        {{ d.dr < 0 ? 'venció hace ' + (-d.dr) + 'd' : d.dr === 0 ? 'vence hoy' : 'en ' + d.dr + 'd' }}
+                                    </small>
+                                </span>
+                            </li>
+                        </ul>
+                        <p v-else class="empty">No hay vencimientos programados.</p>
+                    </article>
+
+                    <!-- Barras por pagar vs por cobrar -->
+                    <article class="card span-2">
+                        <div class="card-head">
+                            <h2>Balance por moneda</h2>
+                            <span class="card-sub">Comparación por pagar vs. por cobrar, saldo en cada moneda original</span>
+                        </div>
+                        <div class="bars">
+                            <div v-for="m in monedas" :key="m" class="bar-row">
+                                <span class="bar-cur" :style="{ color: curColor(m) }">{{ m }}</span>
+                                <div class="bar-track">
+                                    <div class="bar pay" :style="{ width: barW(porMoneda[m].pagar, barMax) }"></div>
+                                    <div class="bar collect" :style="{ width: barW(porMoneda[m].cobrar, barMax) }"></div>
+                                </div>
+                                <span class="bar-nums mono">
+                                    <span class="txt-pay">-{{ fmt(porMoneda[m].pagar) }}</span>
+                                    <span class="txt-collect">+{{ fmt(porMoneda[m].cobrar) }}</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="bars-legend">
+                            <span><i class="sw pay"></i> Por pagar</span>
+                            <span><i class="sw collect"></i> Por cobrar</span>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- ================= DEUDAS ================= -->
+            <section v-show="currentView === 'deudas'" class="view">
+                <div class="view-tools">
+                    <div class="tabs">
+                        <button v-for="f in filtros" :key="f.id" class="tab" :class="{ active: filtro === f.id }" @click="filtro = f.id">
+                            {{ f.label }} <span class="tab-count">{{ f.count() }}</span>
+                        </button>
+                    </div>
+                    <button class="btn primary" @click="openForm()"><icon name="plus"></icon> Nueva deuda</button>
+                </div>
+
+                <!-- Lista -->
+                <div class="card table-card">
+                    <div class="row-head">
+                        <span>Descripción</span><span>Contraparte</span><span class="ta-r">Monto</span>
+                        <span class="ta-r">Saldo</span><span>Vence</span><span>Estado</span><span></span>
+                    </div>
+
+                    <transition-group name="list" tag="div">
+                        <div v-for="d in filtered" :key="d.id" class="drow" :class="{ paid: d.estado === 'pagada' }">
+                            <div class="dcell desc" data-l="Descripción">
+                                <span class="type-dot" :class="d.tipo"></span>
+                                <div>
+                                    <b>{{ d.descripcion }}</b>
+                                    <small v-if="d.notas" class="txt-muted">{{ d.notas }}</small>
+                                </div>
+                            </div>
+                            <div class="dcell" data-l="Contraparte">{{ d.contraparte || '—' }}</div>
+                            <div class="dcell ta-r" data-l="Monto">
+                                <span class="mono" :style="{ color: curColor(d.moneda) }">{{ symOf(d.moneda) }} {{ fmt(d.monto) }}</span>
+                            </div>
+                            <div class="dcell ta-r" data-l="Saldo">
+                                <b class="mono">{{ symOf(d.moneda) }} {{ fmt(d.monto - d.monto_abonado) }}</b>
+                                <small v-if="d.monto_abonado > 0" class="txt-muted">abonado {{ fmt(d.monto_abonado) }}</small>
+                            </div>
+                            <div class="dcell" data-l="Vence">
+                                <span v-if="d.fecha_vencimiento" :class="d.estado !== 'pagada' ? dueClass(d) : ''">
+                                    {{ d.fecha_vencimiento }}
+                                    <small v-if="d.estado !== 'pagada' && dueDays(d) !== null" class="due-tag">
+                                        {{ dueDays(d) < 0 ? 'vencida' : dueDays(d) === 0 ? 'hoy' : dueDays(d)+'d' }}
+                                    </small>
+                                </span>
+                                <span v-else class="txt-muted">—</span>
+                            </div>
+                            <div class="dcell" data-l="Estado">
+                                <span class="pill" :class="d.estado">{{ d.estado }}</span>
+                            </div>
+                            <div class="dcell actions">
+                                <button v-if="d.estado !== 'pagada'" class="icon-btn sm" title="Registrar abono" @click="abonar(d)"><icon name="cash"></icon></button>
+                                <button class="icon-btn sm" :title="d.estado === 'pagada' ? 'Marcar pendiente' : 'Marcar pagada'" @click="toggleEstado(d)"><icon name="check"></icon></button>
+                                <button class="icon-btn sm" title="Editar" @click="openForm(d)"><icon name="edit"></icon></button>
+                                <button class="icon-btn sm danger" title="Eliminar" @click="del(d)"><icon name="trash"></icon></button>
+                            </div>
+                        </div>
+                    </transition-group>
+
+                    <p v-if="!filtered.length" class="empty big">
+                        <icon name="debts"></icon>
+                        {{ deudas.length ? 'Nada en este filtro.' : 'Aún no registras deudas. Crea la primera con “Nueva deuda”.' }}
+                    </p>
+                </div>
+            </section>
+
+            <!-- ================= PLANIFICADOR ================= -->
+            <section v-show="currentView === 'plan'" class="view">
+                <!-- Configuración -->
+                <div class="card planner-cfg">
+                    <div class="pc-item">
+                        <label>Disponible por quincena</label>
+                        <div class="pc-money">
+                            <input v-model.number="planCfg.disponible" type="number" min="0" step="0.01" placeholder="0.00">
+                            <select v-model="planCfg.moneda">
+                                <option value="USD">USD</option>
+                                <option value="BS">Bs</option>
+                                <option value="USDT">USDT</option>
+                            </select>
+                        </div>
+                        <small>Cuánto de tu cobro puedes dedicar a deudas</small>
+                    </div>
+                    <div class="pc-item">
+                        <label>Primer cobro (día)</label>
+                        <input v-model.number="planCfg.d1" type="number" min="1" max="28">
+                        <small>Ej: 15</small>
+                    </div>
+                    <div class="pc-item">
+                        <label>Segundo cobro</label>
+                        <select v-model="planCfg.d2">
+                            <option value="ultimo">Último día</option>
+                            <option :value="30">30</option>
+                            <option :value="28">28</option>
+                            <option :value="15">15</option>
+                        </select>
+                        <small>Fin de mes</small>
+                    </div>
+                    <div class="pc-item">
+                        <label>Proyectar</label>
+                        <select v-model.number="planCfg.nQuincenas">
+                            <option :value="4">4 quincenas</option>
+                            <option :value="6">6 quincenas</option>
+                            <option :value="8">8 quincenas</option>
+                            <option :value="12">12 quincenas</option>
+                        </select>
+                        <small>Horizonte del plan</small>
+                    </div>
+                </div>
+
+                <template v-if="plan.status === 'ok'">
+                    <!-- Resumen -->
+                    <div class="plan-summary">
+                        <div class="ps-chip">
+                            <span class="ps-lbl">Total por pagar</span>
+                            <span class="mono ps-val">{{ symOf(plan.cur) }} {{ fmt(plan.totalDeuda) }}</span>
+                        </div>
+                        <div class="ps-chip">
+                            <span class="ps-lbl">Disponible / quincena</span>
+                            <span class="mono ps-val">{{ symOf(plan.cur) }} {{ fmt(plan.disponible) }}</span>
+                        </div>
+                        <div class="ps-chip">
+                            <span class="ps-lbl">Quincenas para saldar todo</span>
+                            <span class="mono ps-val">{{ plan.quincenas }}</span>
+                        </div>
+                        <div class="ps-chip" :class="plan.risky.length ? 'warn' : 'ok'">
+                            <span class="ps-lbl">Deudas en riesgo</span>
+                            <span class="mono ps-val">{{ plan.risky.length }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Panel de riesgo -->
+                    <div v-if="plan.risky.length" class="card risk-panel">
+                        <div class="card-head">
+                            <h2><icon name="alert"></icon> Atención: se pagarían tarde o no alcanzan</h2>
+                            <span class="card-sub">Necesitas más disponible por quincena, adelantar un cobro, o renegociar la fecha</span>
+                        </div>
+                        <ul class="risk-list">
+                            <li v-for="d in plan.risky" :key="d.id">
+                                <span class="type-dot por_pagar"></span>
+                                <div class="risk-main">
+                                    <b>{{ d.descripcion }}</b>
+                                    <small>{{ symOf(d.moneda) }} {{ fmt(d.monto - d.monto_abonado) }} · vence {{ d.fecha_vencimiento || 'sin fecha' }}</small>
+                                </div>
+                                <span class="risk-msg">
+                                    <template v-if="d.reason === 'late'">Se saldaría el {{ fmtDate(d.completion) }} — {{ d.lateDays }} día(s) tarde</template>
+                                    <template v-else>No alcanza en las próximas {{ planCfg.nQuincenas }} quincenas</template>
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Cronograma -->
+                    <div class="card-head timeline-head">
+                        <h2>Tu plan de pago, quincena por quincena</h2>
+                        <span class="card-sub">Priorizando las deudas que vencen primero</span>
+                    </div>
+                    <div class="timeline">
+                        <article v-for="(p, i) in plan.paydays" :key="i" class="pay-block">
+                            <div class="pay-when">
+                                <span class="pay-idx">{{ i + 1 }}</span>
+                                <div>
+                                    <b>{{ fmtDate(p.date) }}</b>
+                                    <small>Cobras {{ symOf(plan.cur) }} {{ fmt(plan.disponible) }}</small>
+                                </div>
+                            </div>
+                            <ul class="pay-allocs">
+                                <li v-for="(a, j) in p.allocs" :key="j">
+                                    <span class="alloc-dot" :style="{ background: curColor(a.moneda) }"></span>
+                                    <span class="alloc-name">{{ a.descripcion }}<small v-if="a.contraparte"> · {{ a.contraparte }}</small></span>
+                                    <span class="alloc-badge" :class="a.completes ? 'done' : 'partial'">{{ a.completes ? 'queda saldada' : 'abono parcial' }}</span>
+                                    <span class="mono alloc-amt">{{ symOf(plan.cur) }} {{ fmt(a.monto) }}</span>
+                                </li>
+                            </ul>
+                            <div class="pay-foot">
+                                <span>Te sobra</span>
+                                <span class="mono" :class="p.leftover > 0.01 ? 'txt-collect' : 'txt-muted'">{{ symOf(plan.cur) }} {{ fmt(p.leftover) }}</span>
+                            </div>
+                        </article>
+                    </div>
+                    <p class="hint">Los montos se calculan en {{ plan.cur }} usando las tasas actuales. Las deudas en otras monedas se convierten para poder compararlas; paga el equivalente el día indicado.</p>
+                </template>
+
+                <div v-else class="card empty big">
+                    <icon name="wallet"></icon>
+                    <template v-if="plan.status === 'norates'">Necesito las tasas de cambio para calcular. Abre “Tasas de cambio” y actualízalas o fíjalas a mano.</template>
+                    <template v-else>Escribe cuánto puedes destinar por quincena arriba y armaré tu plan de pago automáticamente.</template>
+                </div>
+            </section>
+
+            <!-- ================= TASAS ================= -->
+            <section v-show="currentView === 'tasas'" class="view">
+                <div class="rates-grid">
+                    <article class="rate-card">
+                        <span class="dot bs big"></span>
+                        <span class="rate-name">Dólar BCV</span>
+                        <span class="rate-big mono">{{ rates.bcv ? fmt(rates.bcv) : '—' }}</span>
+                        <span class="rate-unit">Bs por 1 USD · tasa oficial</span>
+                    </article>
+                    <article class="rate-card">
+                        <span class="dot usdt big"></span>
+                        <span class="rate-name">USDT</span>
+                        <span class="rate-big mono">{{ rates.usdt ? fmt(rates.usdt) : '—' }}</span>
+                        <span class="rate-unit">Bs por 1 USDT · mercado</span>
+                    </article>
+                    <article class="rate-card ghost">
+                        <span class="rate-name">Brecha USDT / BCV</span>
+                        <span class="rate-big mono">{{ brecha }}</span>
+                        <span class="rate-unit">Diferencia del mercado sobre el oficial</span>
+                    </article>
+                </div>
+                <div class="rates-meta card">
+                    <div>
+                        <span class="card-sub">Fuente</span>
+                        <b>{{ ratesInfo.manual ? 'Ajuste manual' : 've.dolarapi.com' }}</b>
+                    </div>
+                    <div>
+                        <span class="card-sub">Actualizado</span>
+                        <b>{{ ratesInfo.fecha || '—' }}</b>
+                    </div>
+                    <div class="rates-actions">
+                        <button class="btn" @click="loadRates(true)"><icon name="refresh"></icon> Actualizar</button>
+                        <button class="btn" @click="editRates"><icon name="edit"></icon> Fijar manual</button>
+                    </div>
+                </div>
+                <p class="hint">Las conversiones del panel y del dashboard usan estas tasas. Si la fuente automática falla, fíjalas a mano y quedarán guardadas en este navegador.</p>
+            </section>
+
+            <!-- ================= PLACEHOLDER SECTIONS ================= -->
+            <section v-show="['gastos','metas'].includes(currentView)" class="view">
+                <div class="soon-panel card">
+                    <icon :name="currentView === 'gastos' ? 'expenses' : 'goal'"></icon>
+                    <h2>{{ currentView === 'gastos' ? 'Gastos' : 'Metas de ahorro' }}</h2>
+                    <p>Este módulo aún no está listo. El tablero está diseñado para crecer: aquí irá {{ currentView === 'gastos' ? 'el registro y las categorías de tus gastos' : 'el seguimiento de tus metas de ahorro' }}.</p>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- ===== Modal formulario deuda ===== -->
+    <transition name="fade">
+        <div v-if="showForm" class="modal-scrim" @click.self="closeForm">
+            <div class="modal">
+                <div class="modal-head">
+                    <h2>{{ form.id ? 'Editar deuda' : 'Nueva deuda' }}</h2>
+                    <button class="icon-btn" @click="closeForm"><icon name="close"></icon></button>
+                </div>
+                <form @submit.prevent="save" class="modal-body">
+                    <div class="type-toggle">
+                        <button type="button" :class="{ active: form.tipo === 'por_pagar' }" @click="form.tipo = 'por_pagar'">
+                            <span class="type-dot por_pagar"></span> Yo debo
+                        </button>
+                        <button type="button" :class="{ active: form.tipo === 'por_cobrar' }" @click="form.tipo = 'por_cobrar'">
+                            <span class="type-dot por_cobrar"></span> Me deben
+                        </button>
+                    </div>
+                    <label class="field full">Descripción
+                        <input v-model="form.descripcion" type="text" placeholder="Ej: Préstamo, alquiler, factura…" required>
+                    </label>
+                    <div class="field-row">
+                        <label class="field">{{ form.tipo === 'por_pagar' ? 'A quién le debes' : 'Quién te debe' }}
+                            <input v-model="form.contraparte" type="text" placeholder="Nombre">
+                        </label>
+                        <label class="field">Fecha de vencimiento
+                            <input v-model="form.fecha_vencimiento" type="date">
+                        </label>
+                    </div>
+                    <div class="field-row">
+                        <label class="field">Moneda
+                            <select v-model="form.moneda">
+                                <option value="USD">USD ($)</option>
+                                <option value="BS">Bolívares (Bs)</option>
+                                <option value="USDT">USDT</option>
+                            </select>
+                        </label>
+                        <label class="field">Monto
+                            <input v-model.number="form.monto" type="number" step="0.01" min="0" placeholder="0.00" required>
+                        </label>
+                    </div>
+                    <label class="field full">Notas
+                        <input v-model="form.notas" type="text" placeholder="Opcional">
+                    </label>
+                    <div class="modal-foot">
+                        <button type="button" class="btn" @click="closeForm">Cancelar</button>
+                        <button type="submit" class="btn primary">{{ form.id ? 'Guardar cambios' : 'Agregar deuda' }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </transition>
+
+    <!-- Toast -->
+    <transition name="toast">
+        <div v-if="toast.show" class="toast" :class="toast.type">{{ toast.msg }}</div>
+    </transition>
+
+</div>
+
+<script src="vendor/vue.global.prod.js"></script>
+<script src="app.js?v=2"></script>
+</body>
+</html>

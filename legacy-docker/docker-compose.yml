@@ -1,0 +1,29 @@
+services:
+  web:
+    build: .
+    container_name: deudas_web
+    ports:
+      - "8080:80"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/var/www/html/data
+      - ./public:/var/www/html/public
+    restart: unless-stopped
+
+  cron:
+    build: .
+    container_name: deudas_cron
+    env_file:
+      - .env
+    volumes:
+      - ./data:/var/www/html/data
+      - ./public:/var/www/html/public
+    # Revisa deudas por vencer y envia correo. Corre al arrancar y luego cada 24h.
+    # reminder.php es idempotente: no reenvia dos veces el mismo dia.
+    command: >
+      sh -c "while true; do
+      php /var/www/html/public/api/reminder.php;
+      sleep 86400;
+      done"
+    restart: unless-stopped

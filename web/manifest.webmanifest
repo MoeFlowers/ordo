@@ -1,0 +1,17 @@
+{
+  "name": "Ordo · Finanzas personales",
+  "short_name": "Ordo",
+  "description": "Control de deudas, suscripciones, metas de ahorro y gastos en Bs, USD y USDT.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0B0D",
+  "theme_color": "#0B0B0D",
+  "lang": "es-VE",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

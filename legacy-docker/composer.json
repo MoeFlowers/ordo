@@ -1,0 +1,11 @@
+{
+    "name": "personal/control-deudas",
+    "description": "Control personal de deudas en Bs (BCV), USD y USDT con tasas automaticas y notificaciones por correo",
+    "require": {
+        "php": ">=8.1",
+        "phpmailer/phpmailer": "^6.9"
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

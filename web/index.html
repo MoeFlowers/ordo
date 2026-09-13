@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F4F6FB" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0A0F1A" media="(prefers-color-scheme: dark)">
+    <title>Ordo · Finanzas personales</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Ordo">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+</head>
+<body>
+<div id="app" v-cloak>
+
+    <!-- ===== Cargando ===== -->
+    <div v-if="!ready" class="boot">
+        <span class="boot-mark"></span>
+        <p>Cargando Ordo…</p>
+    </div>
+
+    <!-- ===== Restablecer contraseña (desde el enlace del correo) ===== -->
+    <div v-else-if="recovering" class="auth">
+        <div class="auth-card">
+            <div class="auth-brand">
+                <img src="icons/icon-192.png" alt="Ordo" class="brand-img">
+                <div><b>Ordo</b><small>finanzas personales</small></div>
+            </div>
+            <h1>Nueva contraseña</h1>
+            <p class="auth-sub">Escribe una contraseña nueva para tu cuenta.</p>
+            <form @submit.prevent="setNewPassword">
+                <label class="field">Nueva contraseña
+                    <div class="pass-wrap">
+                        <input v-model="newPassword" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" placeholder="••••••••" minlength="6" required>
+                        <button type="button" class="pass-toggle" @click="showPassword = !showPassword" :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'">
+                            <icon :name="showPassword ? 'eye-off' : 'eye'"></icon>
+                        </button>
+                    </div>
+                </label>
+                <p v-if="authError" class="auth-error">{{ authError }}</p>
+                <button type="submit" class="btn primary block" :disabled="authLoading">{{ authLoading ? 'Guardando…' : 'Guardar contraseña' }}</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===== Login / Registro ===== -->
+    <div v-else-if="!user" class="auth">
+        <div class="auth-card">
+            <div class="auth-brand">
+                <img src="icons/icon-192.png" alt="Ordo" class="brand-img">
+                <div><b>Ordo</b><small>finanzas personales</small></div>
+            </div>
+            <h1>{{ authMode === 'login' ? 'Inicia sesión' : 'Crea tu cuenta' }}</h1>
+            <p class="auth-sub">{{ authMode === 'login' ? 'Entra para ver y gestionar tus deudas.' : 'Regístrate para empezar tu control de deudas.' }}</p>
+            <form @submit.prevent="authSubmit">
+                <label class="field">Correo
+                    <input v-model.trim="authEmail" type="email" autocomplete="email" placeholder="tucorreo@ejemplo.com" required>
+                </label>
+                <label class="field">Contraseña
+                    <div class="pass-wrap">
+                        <input v-model="authPassword" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" placeholder="••••••••" minlength="6" required>
+                        <button type="button" class="pass-toggle" @click="showPassword = !showPassword" :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'" :aria-pressed="showPassword">
+                            <icon :name="showPassword ? 'eye-off' : 'eye'"></icon>
+                        </button>
+                    </div>
+                </label>
+                <button v-if="authMode === 'login'" type="button" class="auth-link" @click="resetPassword">¿Olvidaste tu contraseña?</button>
+                <p v-if="authError" class="auth-error">{{ authError }}</p>
+                <p v-if="authNotice" class="auth-notice">{{ authNotice }}</p>
+                <button type="submit" class="btn primary block" :disabled="authLoading">
+                    {{ authLoading ? 'Un momento…' : (authMode === 'login' ? 'Entrar' : 'Registrarme') }}
+                </button>
+            </form>
+            <p class="auth-switch">
+                {{ authMode === 'login' ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?' }}
+                <button @click="toggleAuthMode">{{ authMode === 'login' ? 'Regístrate' : 'Inicia sesión' }}</button>
+            </p>
+        </div>
+    </div>
+
+    <!-- ===== App ===== -->
+    <template v-else>
+    <aside class="sidebar" :class="{ open: sidebarOpen }">
+        <div class="brand">
+            <span class="brand-mark">
+                <img src="icons/icon-192.png" alt="Ordo" class="brand-img">
+            </span>
+            <span class="brand-text">Ordo<small>finanzas personales</small></span>
+        </div>
+
+        <nav class="nav">
+            <p class="nav-group">Finanzas</p>
+            <button v-for="item in nav" :key="item.id"
+                    class="nav-item" :class="{ active: currentView === item.id, disabled: item.soon }"
+                    @click="item.soon ? null : go(item.id)">
+                <icon :name="item.icon"></icon>
+                <span>{{ item.label }}</span>
+                <span v-if="item.soon" class="soon">pronto</span>
+            </button>
+        </nav>
+
+        <div class="sidebar-foot">
+            <div class="mini-rate"><span class="dot bs"></span> BCV <b class="mono">{{ rates.bcv ? fmt(rates.bcv) : '—' }}</b></div>
+            <div class="mini-rate"><span class="dot usdt"></span> USDT <b class="mono">{{ rates.usdt ? fmt(rates.usdt) : '—' }}</b></div>
+            <div class="mini-rate"><span class="dot" :style="{ background: curColor('EUR') }"></span> EUR <b class="mono">{{ rates.eur ? fmt(rates.eur) : '—' }}</b></div>
+            <div class="user-box">
+                <div class="user-info"><avatar :avatar="profile.avatar" :name="displayName" :size="30"></avatar><span class="user-mail">{{ displayName }}</span></div>
+                <button class="icon-btn sm" title="Cerrar sesión" @click="logout"><icon name="logout"></icon></button>
+            </div>
+        </div>
+    </aside>
+    <div class="scrim" v-if="sidebarOpen" @click="sidebarOpen = false"></div>
+
+    <div class="shell">
+        <header class="topbar">
+            <button class="icon-btn only-mobile" @click="sidebarOpen = true" aria-label="Abrir menú"><icon name="menu"></icon></button>
+            <div class="topbar-title">
+                <h1>{{ nav.find(n => n.id === currentView)?.label }}</h1>
+                <p>{{ pageSubtitle }}</p>
+            </div>
+            <div class="ticker">
+                <div class="tick">
+                    <span class="tick-label"><span class="dot bs"></span>BCV · Bs/$</span>
+                    <span class="mono tick-val">{{ rates.bcv ? fmt(rates.bcv) : '—' }}</span>
+                </div>
+                <div class="tick">
+                    <span class="tick-label"><span class="dot usdt"></span>USDT · Bs</span>
+                    <span class="mono tick-val">{{ rates.usdt ? fmt(rates.usdt) : '—' }}</span>
+                </div>
+                <div class="tick">
+                    <span class="tick-label"><span class="dot" :style="{ background: curColor('EUR') }"></span>EUR · Bs/€</span>
+                    <span class="mono tick-val">{{ rates.eur ? fmt(rates.eur) : '—' }}</span>
+                </div>
+                <button class="icon-btn" :class="{ spin: loadingRates }" @click="loadRates(true)" title="Actualizar tasas"><icon name="refresh"></icon></button>
+                <button class="icon-btn" @click="editRates" title="Ajustar tasas a mano"><icon name="edit"></icon></button>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <!-- DASHBOARD -->
+            <section v-show="currentView === 'dashboard'" class="view">
+                <div class="view-tools">
+                    <div class="seg">
+                        <span class="seg-label">Ver en</span>
+                        <button v-for="m in monedas" :key="m" class="seg-btn" :class="{ active: verMoneda === m }" @click="verMoneda = m">{{ m }}</button>
+                    </div>
+                </div>
+                <div class="kpis">
+                    <article class="kpi pay">
+                        <span class="kpi-eyebrow">Por pagar</span>
+                        <span class="kpi-value mono">{{ sym }} <count-up :value="totals.pagar"></count-up></span>
+                        <span class="kpi-foot"><icon name="alert"></icon> {{ totals.vencidas }} vencida(s)</span>
+                    </article>
+                    <article class="kpi collect">
+                        <span class="kpi-eyebrow">Por cobrar</span>
+                        <span class="kpi-value mono">{{ sym }} <count-up :value="totals.cobrar"></count-up></span>
+                        <span class="kpi-foot">{{ countCobrar }} cuenta(s) a favor</span>
+                    </article>
+                    <article class="kpi" :class="totals.neto >= 0 ? 'good' : 'bad'">
+                        <span class="kpi-eyebrow">Balance neto</span>
+                        <span class="kpi-value mono">{{ sym }} <count-up :value="totals.neto"></count-up></span>
+                        <span class="kpi-foot">{{ totals.neto >= 0 ? 'A tu favor' : 'En contra' }}</span>
+                    </article>
+                    <article class="kpi soon-kpi">
+                        <span class="kpi-eyebrow">Próximo vencimiento</span>
+                        <span class="kpi-value mono" :class="{ 'txt-warn': nextDue && nextDue.dr <= 3 }">
+                            {{ nextDue ? (nextDue.dr < 0 ? 'Vencida' : nextDue.dr === 0 ? 'Hoy' : nextDue.dr + ' días') : '—' }}
+                        </span>
+                        <span class="kpi-foot">{{ nextDue ? nextDue.descripcion : 'Nada pendiente' }}</span>
+                    </article>
+                </div>
+                <div class="dash-grid">
+                    <article class="card">
+                        <div class="card-head"><h2>Distribución por moneda</h2><span class="card-sub">Saldo pendiente por pagar, en {{ verMoneda }}</span></div>
+                        <div class="donut-wrap" v-if="donut.total > 0">
+                            <svg class="donut" viewBox="0 0 42 42">
+                                <g transform="rotate(-90 21 21)">
+                                    <circle class="donut-track" cx="21" cy="21" r="15.915"></circle>
+                                    <circle v-for="s in donut.segments" :key="s.label" :stroke="s.color" :stroke-dasharray="s.dash + ' ' + (100 - s.dash)" :stroke-dashoffset="s.offset" cx="21" cy="21" r="15.915"></circle>
+                                </g>
+                                <text x="21" y="20" class="donut-total mono">{{ sym }}{{ fmtShort(donut.total) }}</text>
+                                <text x="21" y="25.5" class="donut-cap">total</text>
+                            </svg>
+                            <ul class="legend">
+                                <li v-for="s in donut.segments" :key="s.label">
+                                    <span class="dot" :style="{ background: s.color }"></span>
+                                    <span class="legend-label">{{ s.label }}</span>
+                                    <span class="mono legend-val">{{ sym }} {{ fmt(s.value) }}</span>
+                                    <span class="legend-pct">{{ Math.round(s.dash) }}%</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <p v-else class="empty">Sin deudas por pagar. Todo en orden.</p>
+                    </article>
+                    <article class="card">
+                        <div class="card-head"><h2>Próximos vencimientos</h2><span class="card-sub">Lo que debes pagar primero</span></div>
+                        <ul class="due-list" v-if="proximos.length">
+                            <li v-for="d in proximos" :key="d.id" class="due-item" @click="go('deudas')">
+                                <span class="due-dot" :class="d.dr < 0 ? 'is-late' : d.dr <= 3 ? 'is-soon' : ''"></span>
+                                <span class="due-main"><b>{{ d.descripcion }}</b><small>{{ d.contraparte || 'Sin contraparte' }}</small></span>
+                                <span class="due-right">
+                                    <span class="mono" :style="{ color: curColor(d.moneda) }">{{ symOf(d.moneda) }} {{ fmt(d.monto - d.monto_abonado) }}</span>
+                                    <small :class="d.dr < 0 ? 'txt-late' : d.dr <= 3 ? 'txt-warn' : 'txt-muted'">
+                                        {{ d.dr < 0 ? 'venció hace ' + (-d.dr) + 'd' : d.dr === 0 ? 'vence hoy' : 'en ' + d.dr + 'd' }}
+                                    </small>
+                                </span>
+                            </li>
+                        </ul>
+                        <p v-else class="empty">No hay vencimientos programados.</p>
+                    </article>
+                    <article class="card span-2">
+                        <div class="card-head"><h2>Balance por moneda</h2><span class="card-sub">Por pagar vs. por cobrar, saldo en cada moneda original</span></div>
+                        <div class="bars">
+                            <div v-for="m in monedas" :key="m" class="bar-row">
+                                <span class="bar-cur" :style="{ color: curColor(m) }">{{ m }}</span>
+                                <div class="bar-track">
+                                    <div class="bar pay" :style="{ width: barW(porMoneda[m].pagar, barMax) }"></div>
+                                    <div class="bar collect" :style="{ width: barW(porMoneda[m].cobrar, barMax) }"></div>
+                                </div>
+                                <span class="bar-nums mono"><span class="txt-pay">-{{ fmt(porMoneda[m].pagar) }}</span><span class="txt-collect">+{{ fmt(porMoneda[m].cobrar) }}</span></span>
+                            </div>
+                        </div>
+                        <div class="bars-legend"><span><i class="sw pay"></i> Por pagar</span><span><i class="sw collect"></i> Por cobrar</span></div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- DEUDAS -->
+            <section v-show="currentView === 'deudas'" class="view">
+                <div class="view-tools">
+                    <div class="tabs">
+                        <button v-for="f in filtros" :key="f.id" class="tab" :class="{ active: filtro === f.id }" @click="filtro = f.id">
+                            {{ f.label }} <span class="tab-count">{{ f.count() }}</span>
+                        </button>
+                    </div>
+                    <button class="btn primary" @click="openForm()"><icon name="plus"></icon> Nueva deuda</button>
+                </div>
+                <div class="card table-card">
+                    <div class="row-head">
+                        <span>Descripción</span><span>Contraparte</span><span class="ta-r">Monto</span>
+                        <span class="ta-r">Saldo</span><span>Vence</span><span>Estado</span><span></span>
+                    </div>
+                    <transition-group name="list" tag="div">
+                        <div v-for="d in filtered" :key="d.id" class="drow" :class="{ paid: d.estado === 'pagada' }">
+                            <div class="dcell desc" data-l="Descripción">
+                                <span class="type-dot" :class="d.tipo"></span>
+                                <div>
+                                    <b>{{ d.descripcion }}</b>
+                                    <small v-if="d.recurrente" class="badge-rec"><icon name="repeat"></icon> Mensual · día {{ d.dia_pago }}</small>
+                                    <small v-if="esFinanciado(d)" class="badge-cashea" :style="{ color: credColor(d.plan), background: credColor(d.plan) + '22' }"><icon name="cashea"></icon> {{ credLabel(d.plan) }} · {{ cuotasPagadas(d) }}/{{ (d.cuotas || []).length }} cuotas</small>
+                                    <small v-if="d.notas" class="txt-muted">{{ d.notas }}</small>
+                                </div>
+                            </div>
+                            <div class="dcell" data-l="Contraparte">{{ d.contraparte || '—' }}</div>
+                            <div class="dcell ta-r" data-l="Monto"><span class="mono" :style="{ color: curColor(d.moneda) }">{{ symOf(d.moneda) }} {{ fmt(d.monto) }}</span></div>
+                            <div class="dcell ta-r" data-l="Saldo">
+                                <b class="mono">{{ symOf(d.moneda) }} {{ fmt(d.monto - d.monto_abonado) }}</b>
+                                <small v-if="d.monto_abonado > 0" class="txt-muted">abonado {{ fmt(d.monto_abonado) }}</small>
+                            </div>
+                            <div class="dcell" data-l="Vence">
+                                <span v-if="d.fecha_vencimiento" :class="d.estado !== 'pagada' ? dueClass(d) : ''">
+                                    {{ d.fecha_vencimiento }}
+                                    <small v-if="d.estado !== 'pagada' && dueDays(d) !== null" class="due-tag">{{ dueDays(d) < 0 ? 'vencida' : dueDays(d) === 0 ? 'hoy' : dueDays(d)+'d' }}</small>
+                                </span>
+                                <span v-else class="txt-muted">—</span>
+                            </div>
+                            <div class="dcell" data-l="Estado"><span class="pill" :class="d.estado">{{ d.estado }}</span></div>
+                            <div class="dcell actions">
+                                <button class="icon-btn sm" title="Ver detalle" @click="openForm(d, 'view')"><icon name="eye"></icon></button>
+                                <button v-if="d.estado !== 'pagada'" class="icon-btn sm" :title="d.recurrente ? 'Abonar parcial' : 'Registrar abono'" @click="abonar(d)"><icon name="cash"></icon></button>
+                                <button class="icon-btn sm" :title="d.recurrente && d.estado !== 'pagada' ? 'Pagué la cuota del mes' : (d.estado === 'pagada' ? 'Marcar pendiente' : 'Marcar pagada')" @click="toggleEstado(d)"><icon :name="d.recurrente && d.estado !== 'pagada' ? 'repeat' : 'check'"></icon></button>
+                                <button class="icon-btn sm" title="Editar" @click="openForm(d, 'edit')"><icon name="edit"></icon></button>
+                                <button class="icon-btn sm danger" title="Eliminar" @click="del(d)"><icon name="trash"></icon></button>
+                            </div>
+                        </div>
+                    </transition-group>
+                    <p v-if="!filtered.length" class="empty big">
+                        <icon name="debts"></icon>
+                        {{ deudas.length ? 'Nada en este filtro.' : 'Aún no registras deudas. Crea la primera con “Nueva deuda”.' }}
+                    </p>
+                </div>
+            </section>
+
+            <!-- SUSCRIPCIONES / MENSUALIDADES -->
+            <section v-show="currentView === 'subs'" class="view">
+                <div class="metric-grid metric-3">
+                    <div class="metric"><span class="m-lbl">Gasto mensual</span><span class="m-val mono">$ <count-up :value="suscripciones.totalMensual"></count-up></span><span class="m-sub">{{ suscripciones.count }} suscripción(es)</span></div>
+                    <div class="metric"><span class="m-lbl">Por pagar pronto</span><span class="m-val mono txt-warn">{{ suscripciones.porPagar }}</span><span class="m-sub">en los próximos {{ LEAD_DIAS }} días</span></div>
+                    <div class="metric"><span class="m-lbl">Al día</span><span class="m-val mono txt-collect">{{ suscripciones.count - suscripciones.porPagar }}</span><span class="m-sub">sin acción por ahora</span></div>
+                </div>
+
+                <div class="subs-list" v-if="suscripciones.count">
+                    <article v-for="s in suscripciones.items" :key="s.id" class="card sub-card" :class="s.subestado">
+                        <div class="sub-top">
+                            <div class="sub-id">
+                                <span class="sub-icon" :class="s.subestado"><icon :name="subIcon(s.subestado)"></icon></span>
+                                <div>
+                                    <h3>{{ s.descripcion }}</h3>
+                                    <small>{{ s.contraparte || 'sin contraparte' }} · día {{ s.dia_pago }} de cada mes</small>
+                                </div>
+                            </div>
+                            <span class="sub-monto mono" :style="{ color: curColor(s.moneda) }">{{ symOf(s.moneda) }} {{ fmt(s.monto) }}<small>/mes</small></span>
+                        </div>
+                        <div class="sub-statusbar" :class="s.subestado">
+                            <span class="ss-label"><icon :name="subIcon(s.subestado)"></icon> {{ subLabel(s) }}</span>
+                            <span class="ss-date">{{ s.subestado === 'pagada' ? 'próx. ' + s.fecha_vencimiento : s.fecha_vencimiento }}</span>
+                        </div>
+                        <div class="sub-actions">
+                            <button v-if="s.subestado !== 'pagada'" class="btn primary btn-sm" @click="pagarMes(s)"><icon name="check"></icon> Pagué este mes</button>
+                            <span v-else class="sub-done"><icon name="check"></icon> Listo por este mes</span>
+                            <span v-if="s.pagos_realizados" class="sub-pagos">{{ s.pagos_realizados }} pagos</span>
+                            <button class="icon-btn sm" title="Ver detalle" @click="openForm(s, 'view')"><icon name="eye"></icon></button>
+                            <button class="icon-btn sm danger" title="Eliminar" @click="del(s)"><icon name="trash"></icon></button>
+                        </div>
+                    </article>
+                </div>
+                <div v-else class="card empty big">
+                    <icon name="repeat"></icon>
+                    No tienes suscripciones aún. En cualquier deuda activa la opción “Deuda mensual recurrente” y aparecerá aquí.
+                </div>
+                <p class="hint">Al pagar la cuota, la suscripción avanza al mes siguiente y sale del planificador; vuelve a aparecer (y te avisa) <b>{{ LEAD_DIAS }} días antes</b> del próximo cobro.</p>
+            </section>
+
+            <!-- PLANIFICADOR -->
+            <section v-show="currentView === 'plan'" class="view">
+                <div class="card planner-cfg">
+                    <div class="pc-item">
+                        <label>Disponible por quincena</label>
+                        <div class="pc-money">
+                            <input v-model.number="planCfg.disponible" type="number" min="0" step="0.01" placeholder="0.00">
+                            <select v-model="planCfg.moneda"><option value="USD">USD</option><option value="BS">Bs</option><option value="USDT">USDT</option></select>
+                        </div>
+                        <small>Cuánto de tu cobro puedes dedicar a deudas</small>
+                    </div>
+                    <div class="pc-item"><label>Primer cobro (día)</label><input v-model.number="planCfg.d1" type="number" min="1" max="28"><small>Ej: 15</small></div>
+                    <div class="pc-item">
+                        <label>Segundo cobro</label>
+                        <select v-model="planCfg.d2"><option value="ultimo">Último día</option><option :value="30">30</option><option :value="28">28</option><option :value="15">15</option></select>
+                        <small>Fin de mes</small>
+                    </div>
+                    <div class="pc-item">
+                        <label>Proyectar</label>
+                        <select v-model.number="planCfg.nQuincenas"><option :value="4">4 quincenas</option><option :value="6">6 quincenas</option><option :value="8">8 quincenas</option><option :value="12">12 quincenas</option></select>
+                        <small>Horizonte del plan</small>
+                    </div>
+                </div>
+                <template v-if="board.status === 'ok'">
+                    <div class="view-tools board-tools">
+                        <div class="plan-summary board-summary">
+                            <div class="ps-chip"><span class="ps-lbl">Total por pagar</span><span class="mono ps-val">{{ symOf(board.cur) }} {{ fmt(board.totalDeuda) }}</span></div>
+                            <div class="ps-chip ok"><span class="ps-lbl">Asignado</span><span class="mono ps-val">{{ symOf(board.cur) }} {{ fmt(board.totalAsignado) }}</span></div>
+                            <div class="ps-chip" :class="board.sinAsignar ? 'warn' : 'ok'"><span class="ps-lbl">Sin asignar</span><span class="mono ps-val">{{ board.sinAsignar }}</span></div>
+                        </div>
+                        <div class="board-actions">
+                            <button class="btn" @click="autoAsignar"><icon name="zap"></icon> Auto-asignar</button>
+                            <button class="btn" @click="limpiarAsign"><icon name="close"></icon> Limpiar</button>
+                        </div>
+                    </div>
+                    <p class="hint board-hint">Arrastra una deuda al cobro donde la vas a pagar · tócala para ver el detalle y editarla. La barra muestra cuánto de tu disponible usas (roja = te pasas); “tarde” = la pusiste después de su vencimiento.</p>
+                    <div class="board">
+                        <div class="board-col backlog">
+                            <div class="bc-head"><h3><icon name="debts"></icon> Por asignar</h3><span class="bc-count">{{ board.backlog.length }}</span></div>
+                            <div class="col-list" data-key="backlog" v-sortable="onDrop">
+                                <div v-for="d in board.backlog" :key="d.id" :data-id="d.id" class="drag-card" :class="{ 'is-cashea': d.cashea }" :style="d.cashea && d.provColor ? { borderLeftColor: d.provColor } : {}" @click="verDeuda(d)" title="Toca para ver y editar">
+                                    <span class="dc-dot" :style="{ background: curColor(d.moneda) }"></span>
+                                    <div class="dc-main"><b>{{ d.descripcion }}</b><small>{{ d.contraparte || 'sin contraparte' }} · vence {{ d.fecha_vencimiento || '—' }}</small></div>
+                                    <span class="dc-amt"><span class="mono">{{ symOf(board.cur) }} {{ fmt(d.saldoConv) }}</span><small v-if="d.abonado > 0" class="dc-abon">de {{ fmt(d.montoConv) }}</small></span>
+                                    <icon name="eye" class="dc-eye"></icon>
+                                </div>
+                                <p v-if="!board.backlog.length" class="col-empty">Todo asignado 🎉</p>
+                            </div>
+                        </div>
+                        <div v-for="col in board.columns" :key="col.key" class="board-col pay" :class="{ over: col.over }">
+                            <div class="bc-head">
+                                <div><h3>{{ col.label }}</h3><small class="bc-sub">Cobras {{ symOf(board.cur) }} {{ fmt(col.cap) }}</small></div>
+                                <span class="bc-count">{{ col.cards.length }}</span>
+                            </div>
+                            <div class="cap-bar"><div class="cap-fill" :class="{ over: col.over }" :style="{ width: Math.min(100, col.pct) + '%' }"></div></div>
+                            <div class="cap-info">
+                                <span class="mono">{{ symOf(board.cur) }} {{ fmt(col.used) }}</span>
+                                <span v-if="col.over" class="mono txt-late">te pasas {{ symOf(board.cur) }} {{ fmt(-col.remaining) }}</span>
+                                <span v-else class="mono txt-muted">quedan {{ symOf(board.cur) }} {{ fmt(col.remaining) }}</span>
+                            </div>
+                            <div class="col-list" :data-key="col.key" v-sortable="onDrop">
+                                <div v-for="d in col.cards" :key="d.id" :data-id="d.id" class="drag-card" :class="{ late: d.late, 'is-cashea': d.cashea }" :style="d.cashea && d.provColor && !d.late ? { borderLeftColor: d.provColor } : {}" @click="verDeuda(d)" title="Toca para ver y editar">
+                                    <span class="dc-dot" :style="{ background: curColor(d.moneda) }"></span>
+                                    <div class="dc-main"><b>{{ d.descripcion }}</b><small><span v-if="d.late" class="txt-late">tarde · </span>vence {{ d.fecha_vencimiento || '—' }}</small></div>
+                                    <span class="dc-amt"><span class="mono">{{ symOf(board.cur) }} {{ fmt(d.saldoConv) }}</span><small v-if="d.abonado > 0" class="dc-abon">de {{ fmt(d.montoConv) }}</small></span>
+                                    <icon name="eye" class="dc-eye"></icon>
+                                </div>
+                                <p v-if="!col.cards.length" class="col-empty">Suelta aquí</p>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                <div v-else class="card empty big">
+                    <icon name="wallet"></icon>
+                    <template v-if="board.status === 'norates'">Necesito las tasas para calcular. Ve a “Tasas de cambio” y actualízalas.</template>
+                    <template v-else>Escribe cuánto puedes destinar por quincena arriba y arma tu tablero arrastrando las deudas.</template>
+                </div>
+            </section>
+
+            <!-- ESTADÍSTICAS -->
+            <section v-show="currentView === 'stats'" class="view">
+                <template v-if="stats.status === 'ok'">
+                    <!-- Diagnóstico + score -->
+                    <div class="card diag" :class="stats.verdictType">
+                        <div class="diag-score">
+                            <svg viewBox="0 0 42 42" class="gauge">
+                                <circle class="gauge-track" cx="21" cy="21" r="15.915"></circle>
+                                <g transform="rotate(-90 21 21)">
+                                    <circle class="gauge-fill" cx="21" cy="21" r="15.915" :stroke-dasharray="stats.score + ' ' + (100 - stats.score)"></circle>
+                                </g>
+                                <text x="21" y="20.5" class="gauge-num mono"><count-up :value="stats.score" :dec="0"></count-up></text>
+                                <text x="21" y="26" class="gauge-cap">/ 100</text>
+                            </svg>
+                        </div>
+                        <div class="diag-text">
+                            <span class="diag-eyebrow">Puntuación de administración</span>
+                            <h2>{{ stats.verdict }}</h2>
+                            <p>Combina puntualidad, avance de pago y concentración de la deuda. Sube pagando lo vencido y repartiendo mejor tus compromisos.</p>
+                        </div>
+                    </div>
+
+                    <!-- Diagnóstico automático -->
+                    <div class="card">
+                        <div class="card-head"><h2>Qué haces bien y dónde fallas</h2><span class="card-sub">Análisis automático de tu situación actual</span></div>
+                        <ul class="insight-list">
+                            <li v-for="(it, i) in stats.insights" :key="i" :class="it.ok ? 'good' : 'bad'">
+                                <icon :name="it.ok ? 'check' : 'alert'"></icon>
+                                <span>{{ it.t }}</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Métricas -->
+                    <div class="metric-grid">
+                        <div class="metric"><span class="m-lbl">Deuda activa</span><span class="m-val mono txt-pay">$ <count-up :value="stats.totalPagar"></count-up></span><span class="m-sub">{{ stats.activas }} pendiente(s)</span></div>
+                        <div class="metric"><span class="m-lbl">Pagado acumulado</span><span class="m-val mono txt-collect">$ <count-up :value="stats.pagadoAcum"></count-up></span><span class="m-sub">{{ Math.round(stats.progreso) }}% del total</span></div>
+                        <div class="metric"><span class="m-lbl">Vencido</span><span class="m-val mono" :class="stats.montoVencido > 0 ? 'txt-late' : ''">$ <count-up :value="stats.montoVencido"></count-up></span><span class="m-sub">{{ stats.vencidas }} deuda(s)</span></div>
+                        <div class="metric"><span class="m-lbl">Vence en 30 días</span><span class="m-val mono txt-warn">$ <count-up :value="stats.montoEn30"></count-up></span><span class="m-sub">{{ stats.en30 }} deuda(s)</span></div>
+                        <div class="metric"><span class="m-lbl">Por cobrar</span><span class="m-val mono txt-collect">$ <count-up :value="stats.totalCobrar"></count-up></span><span class="m-sub">a tu favor</span></div>
+                        <div class="metric"><span class="m-lbl">Saldadas</span><span class="m-val mono"><count-up :value="stats.saldadas" :dec="0"></count-up></span><span class="m-sub">deudas cerradas</span></div>
+                    </div>
+
+                    <div class="dash-grid">
+                        <!-- Por acreedor -->
+                        <article class="card">
+                            <div class="card-head"><h2>A quién le debes más</h2><span class="card-sub">Saldo pendiente por acreedor, en USD</span></div>
+                            <div class="rank" v-if="stats.porAcreedor.length">
+                                <div v-for="a in stats.porAcreedor" :key="a.n" class="rank-row">
+                                    <span class="rank-name">{{ a.n }}</span>
+                                    <div class="rank-track"><div class="rank-bar" :style="{ width: (a.v / stats.maxAcc * 100) + '%' }"></div></div>
+                                    <span class="rank-val mono">$ {{ fmt(a.v) }}</span>
+                                </div>
+                            </div>
+                            <p v-else class="empty">Sin deudas por pagar.</p>
+                        </article>
+
+                        <!-- Vencimientos por mes -->
+                        <article class="card">
+                            <div class="card-head"><h2>Cuánto vence cada mes</h2><span class="card-sub">Distribución de pagos futuros, en USD</span></div>
+                            <div class="months" v-if="stats.porMes.length">
+                                <div v-for="mo in stats.porMes" :key="mo.m" class="month-col">
+                                    <span class="month-val mono">{{ fmt(mo.v) }}</span>
+                                    <div class="month-bar-wrap"><div class="month-bar" :style="{ height: Math.max(6, mo.v / stats.maxMes * 100) + '%' }"></div></div>
+                                    <span class="month-lbl">{{ mesLabel(mo.m) }}</span>
+                                </div>
+                            </div>
+                            <p v-else class="empty">No hay vencimientos con fecha.</p>
+                        </article>
+                    </div>
+                </template>
+                <div v-else class="card empty big">
+                    <icon name="pulse"></icon>
+                    <template v-if="stats.status === 'norates'">Necesito las tasas para calcular las métricas. Ve a “Tasas de cambio” y actualízalas.</template>
+                    <template v-else>Aún no hay datos suficientes. Registra tus deudas y aquí verás tu diagnóstico.</template>
+                </div>
+            </section>
+
+            <!-- TASAS -->
+            <section v-show="currentView === 'tasas'" class="view">
+                <div class="rates-grid">
+                    <article class="rate-card"><span class="dot bs big"></span><span class="rate-name">Dólar BCV</span><span class="rate-big mono">{{ rates.bcv ? fmt(rates.bcv) : '—' }}</span><span class="rate-unit">Bs por 1 USD · tasa oficial</span></article>
+                    <article class="rate-card"><span class="dot usdt big"></span><span class="rate-name">USDT</span><span class="rate-big mono">{{ rates.usdt ? fmt(rates.usdt) : '—' }}</span><span class="rate-unit">Bs por 1 USDT · mercado</span></article>
+                    <article class="rate-card"><span class="dot big" :style="{ background: curColor('EUR') }"></span><span class="rate-name">Euro</span><span class="rate-big mono">{{ rates.eur ? fmt(rates.eur) : '—' }}</span><span class="rate-unit">Bs por 1 € · BCV (paridad BCE)</span></article>
+                    <article class="rate-card ghost"><span class="rate-name">Brecha USDT / BCV</span><span class="rate-big mono">{{ brecha }}</span><span class="rate-unit">Diferencia del mercado sobre el oficial</span></article>
+                </div>
+                <div class="rates-meta card">
+                    <div><span class="card-sub">Fuente</span><b>{{ ratesInfo.manual ? 'Ajuste manual' : 've.dolarapi.com' }}</b></div>
+                    <div><span class="card-sub">Actualizado</span><b>{{ ratesInfo.fecha || '—' }}</b></div>
+                    <div class="rates-actions"><button class="btn" @click="loadRates(true)"><icon name="refresh"></icon> Actualizar</button><button class="btn" @click="editRates"><icon name="edit"></icon> Fijar manual</button></div>
+                </div>
+                <p class="hint">Las conversiones usan estas tasas. Si la fuente automática falla, fíjalas a mano y quedarán guardadas en este dispositivo.</p>
+            </section>
+
+            <!-- CALCULADORA / SIMULADOR -->
+            <section v-show="currentView === 'calc'" class="view">
+                <div class="view-tools">
+                    <div class="tabs calc-tabs">
+                        <button class="tab" :class="{ active: calcTab === 'conversor' }" @click="calcTab = 'conversor'"><icon name="scale"></icon> Conversor</button>
+                        <button class="tab" :class="{ active: calcTab === 'compra' }" @click="calcTab = 'compra'"><icon name="cart"></icon> Compra</button>
+                        <button class="tab" :class="{ active: calcTab === 'deuda' }" @click="calcTab = 'deuda'"><icon name="debts"></icon> Deuda</button>
+                        <button class="tab" :class="{ active: calcTab === 'credito' }" @click="calcTab = 'credito'"><icon name="cashea"></icon> Crédito</button>
+                    </div>
+                </div>
+
+                <!-- CONVERSOR -->
+                <div v-if="calcTab === 'conversor'" class="card calc-card">
+                    <div class="card-head"><h2>Conversor</h2><span class="card-sub">Entre Bs, USD, USDT y €</span></div>
+                    <label class="field full">Monto<input v-model.number="calc.monto" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                    <div class="calc-cur-row">
+                        <label class="field">De
+                            <div class="cur-seg wrap"><button type="button" v-for="mm in monedas" :key="mm" :class="{ active: calc.de === mm }" :style="calc.de === mm ? { borderColor: curColor(mm), color: curColor(mm) } : {}" @click="calc.de = mm">{{ symOf(mm) }}</button></div>
+                        </label>
+                        <button class="icon-btn calc-swap" title="Invertir" @click="swapConv"><icon name="repeat"></icon></button>
+                        <label class="field">A
+                            <div class="cur-seg wrap"><button type="button" v-for="mm in monedas" :key="mm" :class="{ active: calc.a === mm }" :style="calc.a === mm ? { borderColor: curColor(mm), color: curColor(mm) } : {}" @click="calc.a = mm">{{ symOf(mm) }}</button></div>
+                        </label>
+                    </div>
+                    <div class="calc-result">
+                        <span class="calc-res-lbl">{{ fmt(calc.monto) }} {{ symOf(calc.de) }} =</span>
+                        <transition name="pop" mode="out-in"><span class="calc-res-val mono" :key="convResult" :style="{ color: curColor(calc.a) }">{{ convResult === null ? '— (falta tasa)' : (symOf(calc.a) + ' ' + fmt(convResult)) }}</span></transition>
+                    </div>
+                    <label class="rec-toggle"><input type="checkbox" v-model="calc.usarCustom"><span class="rec-txt"><icon name="sliders"></icon> Usar una tasa personalizada</span></label>
+                    <div v-if="calc.usarCustom" class="calc-custom">
+                        <label class="field">Bs por 1<div class="cur-seg"><button type="button" v-for="mm in ['USD','USDT','EUR']" :key="mm" :class="{ active: calc.customPar === mm }" @click="calc.customPar = mm">{{ symOf(mm) }}</button></div></label>
+                        <label class="field">Tasa (Bs)<input v-model.number="calc.custom" type="number" step="0.01" min="0" placeholder="Ej: 850,00" inputmode="decimal"></label>
+                    </div>
+                    <p class="hint"><icon name="sliders"></icon> {{ calc.usarCustom ? 'Uso tu tasa para esa moneda; el resto usa las tasas actuales.' : 'Uso las tasas actuales (BCV, USDT, €).' }}</p>
+                </div>
+
+                <!-- COMPRA -->
+                <div v-if="calcTab === 'compra'" class="card calc-card">
+                    <div class="card-head"><h2>Simular compra</h2><span class="card-sub">Cuánto te cuesta en cada moneda</span></div>
+                    <div class="field-row">
+                        <label class="field">Precio<input v-model.number="calc.monto" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                        <label class="field">Moneda<div class="cur-seg wrap"><button type="button" v-for="mm in monedas" :key="mm" :class="{ active: calc.de === mm }" :style="calc.de === mm ? { borderColor: curColor(mm), color: curColor(mm) } : {}" @click="calc.de = mm">{{ symOf(mm) }}</button></div></label>
+                    </div>
+                    <ul class="calc-equivs">
+                        <li v-for="e in compraEquivs" :key="e.m" :class="{ me: e.m === calc.de }">
+                            <span class="ce-cur" :style="{ color: curColor(e.m) }">{{ e.m }}</span>
+                            <span class="mono ce-val">{{ e.v === null ? '—' : (symOf(e.m) + ' ' + fmt(e.v)) }}</span>
+                        </li>
+                    </ul>
+                    <label class="rec-toggle"><input type="checkbox" v-model="calc.usarCustom"><span class="rec-txt"><icon name="sliders"></icon> Usar una tasa personalizada</span></label>
+                    <div v-if="calc.usarCustom" class="calc-custom">
+                        <label class="field">Bs por 1<div class="cur-seg"><button type="button" v-for="mm in ['USD','USDT','EUR']" :key="mm" :class="{ active: calc.customPar === mm }" @click="calc.customPar = mm">{{ symOf(mm) }}</button></div></label>
+                        <label class="field">Tasa (Bs)<input v-model.number="calc.custom" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                    </div>
+                </div>
+
+                <!-- DEUDA -->
+                <div v-if="calcTab === 'deuda'" class="card calc-card">
+                    <div class="card-head"><h2>Simular deuda / préstamo</h2><span class="card-sub">Cuota mensual e intereses</span></div>
+                    <div class="calc-grid3">
+                        <label class="field">Monto<input v-model.number="calc.dMonto" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                        <label class="field">Interés anual %<input v-model.number="calc.dTasa" type="number" step="0.1" min="0" inputmode="decimal"></label>
+                        <label class="field">Meses<input v-model.number="calc.dMeses" type="number" min="1" max="600" inputmode="numeric"></label>
+                    </div>
+                    <label class="field">Moneda<div class="cur-seg wrap"><button type="button" v-for="mm in monedas" :key="mm" :class="{ active: calc.dMoneda === mm }" :style="calc.dMoneda === mm ? { borderColor: curColor(mm), color: curColor(mm) } : {}" @click="calc.dMoneda = mm">{{ symOf(mm) }}</button></div></label>
+                    <div class="calc-sim-out">
+                        <div class="cso"><span class="cso-lbl">Cuota mensual</span><span class="cso-val mono" :style="{ color: curColor(calc.dMoneda) }">{{ symOf(calc.dMoneda) }} {{ fmt(deudaSim.cuota) }}</span></div>
+                        <div class="cso"><span class="cso-lbl">Total a pagar</span><span class="cso-val mono">{{ symOf(calc.dMoneda) }} {{ fmt(deudaSim.total) }}</span></div>
+                        <div class="cso"><span class="cso-lbl">Intereses</span><span class="cso-val mono txt-late">{{ symOf(calc.dMoneda) }} {{ fmt(deudaSim.interes) }}</span></div>
+                    </div>
+                    <p class="hint">Cuota fija (amortización francesa). Con 0% de interés, es el monto dividido entre los meses.</p>
+                </div>
+
+                <!-- CREDITO -->
+                <div v-if="calcTab === 'credito'" class="card calc-card">
+                    <div class="card-head"><h2>Simular compra a crédito</h2><span class="card-sub">Cuotas y fechas, sin guardar la deuda</span></div>
+                    <div class="calc-grid3">
+                        <label class="field">Precio<input v-model.number="calc.cPrecio" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                        <label class="field">Inicial<input v-model.number="calc.cInicial" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                        <label class="field">N° cuotas<input v-model.number="calc.cN" type="number" min="1" max="48" inputmode="numeric"></label>
+                    </div>
+                    <div class="calc-grid3">
+                        <label class="field">Frecuencia<select v-model="calc.cFrec"><option value="cada14">Cada 14 días</option><option value="quincenal">Cada 15 días</option><option value="mensual">Mensual</option></select></label>
+                        <label class="field">1ª cuota<date-field v-model="calc.cFecha"></date-field></label>
+                        <label class="field">Moneda<div class="cur-seg wrap"><button type="button" v-for="mm in monedas" :key="mm" :class="{ active: calc.cMoneda === mm }" :style="calc.cMoneda === mm ? { borderColor: curColor(mm), color: curColor(mm) } : {}" @click="calc.cMoneda = mm">{{ symOf(mm) }}</button></div></label>
+                    </div>
+                    <div class="calc-sim-out">
+                        <div class="cso"><span class="cso-lbl">Por cuota</span><span class="cso-val mono" :style="{ color: curColor(calc.cMoneda) }">{{ symOf(calc.cMoneda) }} {{ fmt(creditoSim.mc) }}</span></div>
+                        <div class="cso"><span class="cso-lbl">Financiado</span><span class="cso-val mono">{{ symOf(calc.cMoneda) }} {{ fmt(creditoSim.financiado) }}</span></div>
+                        <div class="cso"><span class="cso-lbl">Total</span><span class="cso-val mono">{{ symOf(calc.cMoneda) }} {{ fmt(creditoSim.total) }}</span></div>
+                    </div>
+                    <ul class="cuota-list read calc-cuotas">
+                        <li v-for="c in creditoSim.cuotas" :key="c.n">
+                            <span class="cuota-check"><icon name="clock"></icon></span>
+                            <span class="cuota-n">Cuota {{ c.n }}</span>
+                            <span class="cuota-fecha">{{ c.fecha }}</span>
+                            <span class="mono cuota-monto">{{ symOf(calc.cMoneda) }} {{ fmt(c.monto) }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- GASTOS -->
+            <section v-show="currentView === 'gastos'" class="view">
+                <div class="metric-grid metric-3">
+                    <div class="metric"><span class="m-lbl">Pagado este mes</span><span class="m-val mono txt-collect">$ <count-up :value="gastos.mesPagado"></count-up></span><span class="m-sub">deudas saldadas</span></div>
+                    <div class="metric"><span class="m-lbl">Por pagar este mes</span><span class="m-val mono txt-warn">$ <count-up :value="gastos.mesPorPagar"></count-up></span><span class="m-sub">aún pendiente</span></div>
+                    <div class="metric"><span class="m-lbl">Vencido este mes</span><span class="m-val mono" :class="gastos.mesVencido > 0 ? 'txt-late' : ''">$ <count-up :value="gastos.mesVencido"></count-up></span><span class="m-sub">atrasado</span></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head heat-head">
+                        <div><h2>Calendario de pagos</h2><span class="card-sub">Cada recuadro es un día · más intenso = más monto</span></div>
+                        <div class="heat-nav">
+                            <button class="icon-btn sm" @click="heatYear--" aria-label="Año anterior"><icon name="chevL"></icon></button>
+                            <span class="heat-year mono">{{ heatYear }}</span>
+                            <button class="icon-btn sm" @click="heatYear++" aria-label="Año siguiente"><icon name="chevR"></icon></button>
+                        </div>
+                    </div>
+                    <div v-if="gastos.hasData" class="heat-scroll">
+                        <div class="heat-months">
+                            <span v-for="mo in gastos.months" :key="mo.col" class="heat-month" :style="{ gridColumnStart: mo.col + 1 }">{{ mo.label }}</span>
+                        </div>
+                        <div class="heat-grid">
+                            <div v-for="(cell, i) in gastos.weeks.flat()" :key="i" class="heat-cell" :class="{ empty: !cell }" :style="cell ? { background: cell.bg } : {}" :title="cell ? cell.label + ' · $' + fmt(cell.tot) : ''"></div>
+                        </div>
+                    </div>
+                    <p v-else class="empty big"><icon name="expenses"></icon> Sin pagos con fecha en {{ heatYear }}. Agrega deudas con fecha de vencimiento para ver tu calendario.</p>
+                    <div class="heat-legend">
+                        <span class="hl"><i class="sw" style="background:#E5484D"></i> Vencido</span>
+                        <span class="hl"><i class="sw" style="background:#E6A94E"></i> Por pagar</span>
+                        <span class="hl"><i class="sw" style="background:#F5860F"></i> Planificado</span>
+                        <span class="hl"><i class="sw" style="background:#2EA043"></i> Pagado</span>
+                        <span class="hl scale">menos <i class="sw" style="background:var(--surface-3)"></i><i class="sw" style="background:rgba(124,147,255,.4)"></i><i class="sw" style="background:rgba(124,147,255,.7)"></i><i class="sw" style="background:rgba(124,147,255,1)"></i> más</span>
+                    </div>
+                </div>
+
+                <!-- Gastos reales -->
+                <div class="card">
+                    <div class="card-head heat-head">
+                        <div><h2>Gastos reales</h2><span class="card-sub">Tu gasto del día a día por categoría · en USD</span></div>
+                        <button class="btn primary btn-sm" @click="openGastoForm()" :disabled="!gastosAvailable"><icon name="plus"></icon> Nuevo gasto</button>
+                    </div>
+                    <template v-if="gastosAvailable">
+                        <div class="gr-metrics">
+                            <div class="metric"><span class="m-lbl">Gastado este mes</span><span class="m-val mono">$ <count-up :value="gastosRealMetrics.mes"></count-up></span><span class="m-sub">{{ gastosRealMetrics.count }} registro(s)</span></div>
+                            <div class="metric"><span class="m-lbl">Gastado en {{ heatYear }}</span><span class="m-val mono">$ <count-up :value="gastosRealMetrics.anio"></count-up></span><span class="m-sub">total del año</span></div>
+                        </div>
+                        <div class="gr-cats" v-if="gastosRealMetrics.cats.length">
+                            <div v-for="c in gastosRealMetrics.cats" :key="c.k" class="gr-cat">
+                                <span class="gr-cat-name">{{ c.info.emoji }} {{ c.info.label }}</span>
+                                <div class="gr-track"><div class="gr-bar" :style="{ width: (c.v / gastosRealMetrics.max * 100) + '%' }"></div></div>
+                                <span class="gr-val mono">$ {{ fmt(c.v) }}</span>
+                            </div>
+                        </div>
+                        <ul class="gr-list" v-if="gastosRecientes.length">
+                            <li v-for="g in gastosRecientes" :key="g.id">
+                                <span class="gr-emoji">{{ catInfo(g.categoria).emoji }}</span>
+                                <div class="gr-main"><b>{{ g.descripcion || catInfo(g.categoria).label }}</b><small>{{ catInfo(g.categoria).label }} · {{ g.fecha }}</small></div>
+                                <span class="mono gr-amt" :style="{ color: curColor(g.moneda) }">{{ symOf(g.moneda) }} {{ fmt(g.monto) }}</span>
+                                <button class="icon-btn sm" title="Editar" @click="openGastoForm(g)"><icon name="edit"></icon></button>
+                                <button class="icon-btn sm danger" title="Eliminar" @click="delGasto(g)"><icon name="trash"></icon></button>
+                            </li>
+                        </ul>
+                        <p v-else class="empty">Aún no registras gastos reales. Agrega el primero con “Nuevo gasto”.</p>
+                    </template>
+                    <div v-else class="setup-hint">
+                        <icon name="alert"></icon>
+                        <div>Los gastos reales necesitan la tabla <b>gastos</b>. Ve a <b>Ajustes → Sistema</b> y corre <b>setup.sql</b> una vez para activarlos.</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- METAS DE AHORRO -->
+            <section v-show="currentView === 'metas'" class="view">
+                <div class="view-tools">
+                    <div class="metas-intro"><icon name="piggy"></icon> Ahorros con proyección estilo Binance Earn</div>
+                    <button class="btn primary" @click="openMetaForm()"><icon name="plus"></icon> Nueva meta</button>
+                </div>
+                <div class="metas-grid" v-if="metas.length">
+                    <article v-for="m in metas" :key="m.id" class="card meta-card">
+                        <div class="meta-top">
+                            <div class="meta-id">
+                                <h2>{{ m.nombre }}</h2>
+                                <span class="meta-type" :class="m.tipo">
+                                    <icon :name="m.tipo === 'fija' ? 'lock' : m.tipo === 'flexible' ? 'zap' : 'piggy'"></icon>
+                                    {{ m.tipo === 'fija' ? 'Fija · ' + m.plazo_meses + ' meses' : m.tipo === 'flexible' ? 'Flexible' : 'Ahorro simple' }}
+                                </span>
+                            </div>
+                            <span v-if="m.tipo !== 'simple'" class="meta-apy mono">{{ fmt(m.apy) }}%<small>APY</small></span>
+                        </div>
+                        <div class="meta-amounts">
+                            <span class="mono meta-saved" :style="{ color: curColor(m.moneda) }">{{ symOf(m.moneda) }} {{ fmt(m.ahorrado) }}</span>
+                            <span class="meta-goal">de {{ symOf(m.moneda) }} {{ fmt(m.objetivo) }}</span>
+                        </div>
+                        <div class="meta-prog"><div class="meta-prog-bar" :style="{ width: proyeccion(m).pct + '%' }"></div></div>
+                        <div class="meta-proj">
+                            <template v-if="proyeccion(m).modo === 'simple'">
+                                <div><span class="mp-lbl">Te falta</span><span class="mono mp-val">{{ proyeccion(m).faltante <= 0 ? '¡Meta lograda! 🎉' : symOf(m.moneda) + ' ' + fmt(proyeccion(m).faltante) }}</span></div>
+                                <div><span class="mp-lbl">Progreso</span><span class="mono mp-val">{{ Math.round(proyeccion(m).pct) }}%<small v-if="proyeccion(m).meses > 0" class="mp-extra"> · meta en {{ proyeccion(m).meses }} mes(es)</small></span></div>
+                            </template>
+                            <template v-else-if="proyeccion(m).modo === 'fija'">
+                                <div><span class="mp-lbl">Al vencer · {{ proyeccion(m).fechaFin }}</span><span class="mono mp-val">{{ symOf(m.moneda) }} {{ fmt(proyeccion(m).valorFinal) }}</span></div>
+                                <div><span class="mp-lbl">Interés que ganarías</span><span class="mono mp-val txt-collect">+{{ symOf(m.moneda) }} {{ fmt(proyeccion(m).interes) }}</span></div>
+                            </template>
+                            <template v-else>
+                                <div><span class="mp-lbl">Alcanzas la meta</span><span class="mono mp-val">{{ proyeccion(m).meses === 0 ? '¡Lograda! 🎉' : proyeccion(m).meses === null ? 'define aporte/APY' : 'en ' + proyeccion(m).meses + ' meses' }}</span></div>
+                                <div><span class="mp-lbl">Interés en 12 meses</span><span class="mono mp-val txt-collect">+{{ symOf(m.moneda) }} {{ fmt(proyeccion(m).interes12) }}</span></div>
+                            </template>
+                        </div>
+                        <div class="meta-hist" v-if="m.movimientos && m.movimientos.length">
+                            <span class="mh-title">Últimos movimientos</span>
+                            <div v-for="(mv, i) in m.movimientos.slice().reverse().slice(0, 3)" :key="i" class="mh-row">
+                                <span class="txt-muted">{{ mv.f }}</span>
+                                <span class="mono" :class="mv.m < 0 ? 'txt-late' : 'txt-collect'">{{ mv.m < 0 ? '−' : '+' }}{{ symOf(m.moneda) }} {{ fmt(Math.abs(mv.m)) }}</span>
+                            </div>
+                        </div>
+                        <div class="meta-actions">
+                            <button class="btn primary btn-sm" @click="aportarMeta(m)"><icon name="plus"></icon> Aportar</button>
+                            <button class="icon-btn sm" title="Retirar" @click="quitarAporte(m)"><icon name="minus"></icon></button>
+                            <button class="icon-btn sm" title="Editar" @click="openMetaForm(m)"><icon name="edit"></icon></button>
+                            <button class="icon-btn sm danger" title="Eliminar" @click="delMeta(m)"><icon name="trash"></icon></button>
+                        </div>
+                    </article>
+                </div>
+                <div v-else class="card empty big"><icon name="goal"></icon> Aún no tienes metas. Crea una con “Nueva meta” y proyecta cuánto rendirá tu ahorro.</div>
+                <p class="hint"><b>Flexible:</b> retiras cuando quieras (APY variable). <b>Fija:</b> bloqueas el dinero por un plazo a cambio de mayor APY. La proyección usa interés compuesto mensual; es una estimación, no una garantía.</p>
+            </section>
+
+            <!-- AJUSTES / SISTEMA -->
+            <section v-show="currentView === 'ajustes'" class="view">
+                <div class="card profile-card">
+                    <div class="pf-view">
+                        <avatar :avatar="profile.avatar" :name="displayName" :size="86"></avatar>
+                        <span class="pf-badge">{{ paisNombre ? (paisFlag + ' ' + paisNombre) : 'Cuenta personal' }}</span>
+                        <h2 class="pf-name">{{ displayName }}</h2>
+                        <span class="pf-sub">{{ user.email }}</span>
+                        <div class="pf-chips">
+                            <span class="pf-chip mono">{{ user.email }}</span>
+                            <span class="pf-chip" v-if="paisTzLabel"><icon name="clock"></icon> {{ paisTzLabel }}</span>
+                        </div>
+                        <div class="pf-localtime" v-if="localTime"><span>Hora local:</span> <b class="mono">{{ localTime }}</b></div>
+                        <button class="btn block pf-edit" @click="openProfileForm"><icon name="edit"></icon> Editar perfil</button>
+                    </div>
+                </div>
+
+                <div v-if="allGreen" class="card sys-banner"><icon name="check"></icon><div><b>Todo en verde.</b> Base de datos, sincronización, gastos y correo están listos.</div></div>
+
+                <div class="card">
+                    <div class="card-head heat-head">
+                        <div><h2>Estado del sistema</h2><span class="card-sub">Chequeo en vivo de las dependencias en Supabase</span></div>
+                        <button class="btn btn-sm" :class="{ spin: health.checking }" @click="runHealth"><icon name="refresh"></icon> Rechequear</button>
+                    </div>
+                    <ul class="sys-list">
+                        <li><span class="sys-dot" :class="health.deudasCols ? 'ok' : 'bad'"></span><div class="sys-main"><b>Base de datos (deudas)</b><small>Columnas de recurrentes, abonos y crédito</small></div><span class="sys-tag" :class="health.deudasCols ? 'ok' : 'bad'">{{ health.checked ? (health.deudasCols ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
+                        <li><span class="sys-dot" :class="health.metas ? 'ok' : 'bad'"></span><div class="sys-main"><b>Metas de ahorro</b><small>Tabla metas</small></div><span class="sys-tag" :class="health.metas ? 'ok' : 'bad'">{{ health.checked ? (health.metas ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
+                        <li><span class="sys-dot" :class="health.settings ? 'ok' : 'bad'"></span><div class="sys-main"><b>Sincronización entre dispositivos</b><small>Tabla user_settings · plan, tasas y proveedores</small></div><span class="sys-tag" :class="health.settings ? 'ok' : 'bad'">{{ health.checked ? (health.settings ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
+                        <li><span class="sys-dot" :class="health.gastos ? 'ok' : 'bad'"></span><div class="sys-main"><b>Gastos reales</b><small>Tabla gastos</small></div><span class="sys-tag" :class="health.gastos ? 'ok' : 'bad'">{{ health.checked ? (health.gastos ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
+                    </ul>
+                    <p v-if="health.checked && !(health.deudasCols && health.metas && health.settings && health.gastos)" class="sys-fix">
+                        <icon name="alert"></icon> Abre <b>Supabase → SQL Editor</b>, pega el archivo <b>supabase/setup.sql</b> del proyecto y pulsa <b>Run</b>. Luego “Rechequear”.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <div class="card-head"><h2>Acciones pendientes</h2><span class="card-sub">Un clic tuyo cada una · quedan guardadas y sincronizadas</span></div>
+                    <ul class="sys-list">
+                        <li>
+                            <span class="sys-dot" :class="checklist.emailDeployed ? 'ok' : 'bad'"></span>
+                            <div class="sys-main"><b>Correo de recordatorios</b><small>Desplegar la Edge Function + cron · guía en supabase/DESPLIEGUE.md</small></div>
+                            <button class="btn btn-xs" :disabled="emailTesting" @click="testEmail"><icon name="bell"></icon> {{ emailTesting ? 'Probando…' : 'Enviar prueba' }}</button>
+                            <label class="sys-check"><input type="checkbox" v-model="checklist.emailDeployed"> Hecho</label>
+                        </li>
+                        <li>
+                            <span class="sys-dot" :class="checklist.dbPasswordReset ? 'ok' : 'bad'"></span>
+                            <div class="sys-main"><b>Resetear contraseña de la BD</b><small>Supabase → Settings → Database → Reset password</small></div>
+                            <label class="sys-check"><input type="checkbox" v-model="checklist.dbPasswordReset"> Hecho</label>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <div class="card-head"><h2>Respaldo y exportación</h2><span class="card-sub">Se descarga en tu dispositivo, sin enviar nada a terceros</span></div>
+                    <div class="sys-actions">
+                        <button class="btn" @click="exportCSV"><icon name="download"></icon> Exportar deudas (CSV)</button>
+                        <button class="btn" @click="exportBackup"><icon name="download"></icon> Respaldo completo (JSON)</button>
+                    </div>
+                    <p class="hint"><icon name="alert"></icon> Para “reiniciar” tu cuenta, edita o borra deudas — <b>nunca borres el usuario</b>: eliminarlo borra en cascada todas tus deudas y metas.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal deuda -->
+    <transition name="fade">
+        <div v-if="showForm" class="modal-scrim" @click.self="closeForm">
+            <div class="modal modal-wide">
+                <div class="modal-head">
+                    <h2>{{ formMode === 'view' ? 'Detalle de la deuda' : (form.id ? 'Editar deuda' : 'Nueva deuda') }}</h2>
+                    <button class="icon-btn" @click="closeForm"><icon name="close"></icon></button>
+                </div>
+
+                <!-- ===== VER: carta de detalle compacta ===== -->
+                <div v-if="formMode === 'view'" class="modal-body detail">
+                    <div class="det-hero">
+                        <div class="det-tags">
+                            <span v-if="det.fin" class="prov-badge" :style="{ color: det.provColor, background: det.provColor + '22' }"><icon name="cashea"></icon> {{ det.prov }}</span>
+                            <span v-else class="type-tag" :class="form.tipo"><span class="type-dot" :class="form.tipo"></span> {{ form.tipo === 'por_pagar' ? 'Yo debo' : 'Me deben' }}</span>
+                            <span v-if="form.recurrente" class="badge-rec"><icon name="repeat"></icon> Mensual · día {{ form.dia_pago }}</span>
+                            <span class="pill" :class="form.estado">{{ form.estado }}</span>
+                        </div>
+                        <h3 class="det-title">{{ form.descripcion }}</h3>
+                        <div class="det-amount">
+                            <span class="det-saldo mono" :style="{ color: curColor(form.moneda) }">{{ symOf(form.moneda) }} {{ fmt(det.saldoP) }}</span>
+                            <span class="det-amt-lbl">{{ det.pagada ? 'saldada' : 'saldo pendiente' }}</span>
+                        </div>
+                        <div v-if="det.abonado > 0 || det.fin" class="det-progress">
+                            <div class="det-prog-track"><div class="det-prog-bar" :style="{ width: det.progreso + '%', background: det.fin ? det.provColor : 'var(--collect)' }"></div></div>
+                            <span class="det-prog-lbl">
+                                <template v-if="det.fin">{{ det.pagadas }}/{{ det.total }} cuotas pagadas · restan {{ symOf(form.moneda) }} {{ fmt(det.restante) }}</template>
+                                <template v-else>Abonado {{ symOf(form.moneda) }} {{ fmt(det.abonado) }} de {{ symOf(form.moneda) }} {{ fmt(det.monto) }} ({{ det.progreso }}%)</template>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="det-rows">
+                        <div class="det-row"><span class="dr-k">{{ det.fin ? 'Comercio' : (form.tipo === 'por_pagar' ? 'A quién le debes' : 'Quién te debe') }}</span><span class="dr-v">{{ form.contraparte || '—' }}</span></div>
+                        <div class="det-row" v-if="form.fecha_vencimiento"><span class="dr-k">{{ det.fin ? 'Próxima cuota' : 'Vence' }}</span><span class="dr-v">{{ form.fecha_vencimiento }} <small v-if="det.vence && !det.pagada" :class="det.venceCls">· {{ det.vence }}</small></span></div>
+                        <div class="det-row"><span class="dr-k">Moneda</span><span class="dr-v" :style="{ color: curColor(form.moneda) }">{{ form.moneda }}</span></div>
+                        <div class="det-row" v-if="det.fin && det.monto"><span class="dr-k">Total financiado</span><span class="dr-v mono">{{ symOf(form.moneda) }} {{ fmt(det.monto) }}</span></div>
+                        <div class="det-row" v-if="form.notas"><span class="dr-k">Notas</span><span class="dr-v">{{ form.notas }}</span></div>
+                    </div>
+
+                    <div v-if="det.fin && det.cuotas.length" class="det-sec">
+                        <span class="det-sec-lbl">Cuotas</span>
+                        <ul class="cuota-list read">
+                            <li v-for="(c, i) in det.cuotas" :key="i" :class="{ pagada: c.pagada }">
+                                <span class="cuota-check"><icon :name="c.pagada ? 'check' : 'clock'"></icon></span>
+                                <span class="cuota-n">Cuota {{ c.n }}</span>
+                                <span class="cuota-fecha">{{ c.fecha }}</span>
+                                <span class="mono cuota-monto">{{ symOf(form.moneda) }} {{ fmt(c.monto) }}</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div v-if="!det.fin && form.abonos && form.abonos.length" class="det-sec">
+                        <span class="det-sec-lbl">Historial de abonos</span>
+                        <ul class="ab-list">
+                            <li v-for="(a, i) in form.abonos" :key="i"><span class="ab-date">{{ a.f }}</span><span class="mono ab-amt">{{ symOf(form.moneda) }} {{ fmt(a.m) }}</span></li>
+                        </ul>
+                    </div>
+
+                    <div class="modal-foot det-foot">
+                        <button type="button" class="btn danger-ghost" @click="closeForm(); del(form)"><icon name="trash"></icon> Eliminar</button>
+                        <div class="det-foot-main">
+                            <button v-if="form.estado !== 'pagada' && !det.fin" type="button" class="btn" @click="closeForm(); abonar(form)"><icon name="cash"></icon> Abonar</button>
+                            <button type="button" class="btn primary" @click="editForm"><icon name="edit"></icon> Editar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== EDITAR: formulario ===== -->
+                <form v-else @submit.prevent="save" class="modal-body">
+                    <div class="type-toggle" v-if="!esFinanciado(form)">
+                        <button type="button" :class="{ active: form.tipo === 'por_pagar' }" @click="form.tipo = 'por_pagar'"><span class="type-dot por_pagar"></span> Yo debo</button>
+                        <button type="button" :class="{ active: form.tipo === 'por_cobrar' }" @click="form.tipo = 'por_cobrar'"><span class="type-dot por_cobrar"></span> Me deben</button>
+                    </div>
+                    <label class="field full">Descripción<input v-model="form.descripcion" type="text" placeholder="Ej: Escritorio, préstamo, alquiler…" required></label>
+
+                    <label class="rec-toggle cashea-toggle" :class="{ on: esFinanciado(form) }">
+                        <input type="checkbox" :checked="esFinanciado(form)" @change="toggleFinanciado($event.target.checked)">
+                        <span class="rec-txt"><icon name="cashea"></icon> Compra financiada por cuotas (a crédito)</span>
+                    </label>
+
+                    <!-- Selector de empresa de crédito (personalizable) -->
+                    <div v-if="esFinanciado(form)" class="cred-picker">
+                        <span class="cp-lbl">Empresa / app de crédito</span>
+                        <div class="cp-chips">
+                            <button v-for="p in credProviders" :key="p.nombre" type="button" class="cp-chip" :class="{ active: form.plan === p.nombre }" :style="form.plan === p.nombre ? { borderColor: p.color, color: p.color, background: p.color + '18' } : {}" @click="pickProvider(p.nombre)">
+                                <span class="cp-dot" :style="{ background: p.color }"></span>{{ p.nombre }}
+                                <span v-if="credProviders.length > 1" class="cp-del" title="Quitar proveedor" @click.stop="delProvider(p.nombre)">×</span>
+                            </button>
+                            <button type="button" class="cp-chip add" :class="{ active: provAdding }" @click="provAdding = !provAdding"><icon name="plus"></icon> Otra</button>
+                        </div>
+                        <div v-if="form.plan && !provAdding" class="cp-recolor">
+                            <span class="cp-sub">Color de <b :style="{ color: credColor(form.plan) }">{{ credLabel(form.plan) }}</b></span>
+                            <div class="cp-swatches">
+                                <button v-for="c in credPalette" :key="c" type="button" class="cp-sw" :class="{ sel: credColor(form.plan) === c }" :style="{ background: c }" @click="setProvColor(form.plan, c)"></button>
+                            </div>
+                        </div>
+                        <div v-if="provAdding" class="cp-add">
+                            <input v-model="newProvName" type="text" placeholder="Nombre (ej: Mundo Total, Cashy App)" @keydown.enter.prevent="addProvider">
+                            <div class="cp-swatches">
+                                <button v-for="c in credPalette" :key="c" type="button" class="cp-sw" :class="{ sel: newProvColor === c }" :style="{ background: c }" @click="newProvColor = c"></button>
+                            </div>
+                            <button type="button" class="btn btn-xs primary" @click="addProvider"><icon name="check"></icon> Agregar</button>
+                        </div>
+                    </div>
+
+                    <label class="rec-toggle" v-if="!esFinanciado(form)">
+                        <input type="checkbox" v-model="form.recurrente">
+                        <span class="rec-txt"><icon name="repeat"></icon> Deuda mensual recurrente</span>
+                    </label>
+                    <p v-if="form.recurrente && !esFinanciado(form)" class="rec-hint">Se cobra el mismo día cada mes. No se vence: al pagar la cuota, avanza sola al mes siguiente.</p>
+
+                    <div class="field-row">
+                        <label class="field">{{ esFinanciado(form) ? 'Tienda / comercio' : (form.tipo === 'por_pagar' ? 'A quién le debes' : 'Quién te debe') }}<input v-model="form.contraparte" type="text" placeholder="Nombre"></label>
+                        <label class="field" v-if="!esFinanciado(form) && !form.recurrente">Fecha de vencimiento<date-field v-model="form.fecha_vencimiento"></date-field></label>
+                        <label class="field" v-else-if="!esFinanciado(form)">Día de pago (1–31)<input v-model.number="form.dia_pago" type="number" min="1" max="31" placeholder="Ej: 2"></label>
+                    </div>
+                    <div class="field-row">
+                        <label class="field">Moneda
+                            <div class="cur-seg">
+                                <button type="button" v-for="mm in monedas" :key="mm" :class="{ active: form.moneda === mm }" :style="form.moneda === mm ? { borderColor: curColor(mm), color: curColor(mm) } : {}" @click="form.moneda = mm">{{ symOf(mm) }}</button>
+                            </div>
+                        </label>
+                        <label class="field" v-if="!esFinanciado(form)">Monto<input v-model.number="form.monto" type="number" step="0.01" min="0" placeholder="0.00" required></label>
+                    </div>
+
+                    <div v-if="esFinanciado(form)" class="cashea-box" :style="{ borderLeftColor: credColor(form.plan) }">
+                        <div class="cashea-grid">
+                            <label class="field">Inicial pagada <span class="opt">(ref.)</span><input v-model.number="form.inicial" type="number" min="0" step="0.01" placeholder="0.00"></label>
+                            <label class="field">N° de cuotas<input v-model.number="form.n_cuotas" type="number" min="1" max="48"></label>
+                            <label class="field">Monto por cuota<input v-model.number="form.monto_cuota" type="number" min="0" step="0.01" placeholder="0.00"></label>
+                            <label class="field">Frecuencia<select v-model="form.frecuencia"><option value="cada14">Cada 14 días</option><option value="quincenal">Cada 15 días</option><option value="mensual">Mensual</option></select></label>
+                            <label class="field">Fecha 1ª cuota<date-field v-model="form.fecha_1a"></date-field></label>
+                            <label class="field">Cuotas ya pagadas<input v-model.number="form.cuotas_pagadas" type="number" min="0" :max="form.n_cuotas"></label>
+                        </div>
+                        <button type="button" class="btn btn-xs cashea-gen" @click="generarCuotas"><icon name="repeat"></icon> Generar cuotas</button>
+                        <ul class="cuota-list" v-if="form.cuotas && form.cuotas.length">
+                            <li v-for="(c, i) in form.cuotas" :key="i" :class="{ pagada: c.pagada }" @click="toggleCuota(i)">
+                                <span class="cuota-check"><icon :name="c.pagada ? 'check' : 'clock'"></icon></span>
+                                <span class="cuota-n">Cuota {{ c.n }}</span>
+                                <span class="cuota-fecha">{{ c.fecha }}</span>
+                                <span class="mono cuota-monto">{{ symOf(form.moneda) }} {{ fmt(c.monto) }}</span>
+                            </li>
+                        </ul>
+                        <p class="cashea-resumen" v-if="form.cuotas && form.cuotas.length">
+                            Restante: <b class="mono">{{ symOf(form.moneda) }} {{ fmt(form.cuotas.filter(c => !c.pagada).reduce((s, c) => s + (Number(c.monto) || 0), 0)) }}</b>
+                            · Toca una cuota para marcarla pagada.
+                        </p>
+                        <p v-else class="ab-empty">Llena los datos y toca “Generar cuotas”. Luego marca las que ya pagaste tocándolas.</p>
+                    </div>
+
+                    <label class="field full">Notas<input v-model="form.notas" type="text" placeholder="Opcional"></label>
+
+                    <div class="abonos-box" v-if="!esFinanciado(form)">
+                        <div class="ab-head">
+                            <span class="ab-title">Abonos (pagos parciales)</span>
+                            <button type="button" class="btn btn-xs" @click="addAbonoForm"><icon name="plus"></icon> Abono</button>
+                        </div>
+                        <div class="ab-total">
+                            <label class="field">Total abonado
+                                <input v-model.number="form.monto_abonado" type="number" min="0" step="0.01" placeholder="0.00">
+                            </label>
+                            <span class="ab-saldo">Saldo pendiente: <b class="mono">{{ symOf(form.moneda) }} {{ fmt(Math.max(0, (Number(form.monto)||0) - (Number(form.monto_abonado)||0))) }}</b></span>
+                        </div>
+                        <ul class="ab-list" v-if="form.abonos && form.abonos.length">
+                            <li v-for="(a, i) in form.abonos" :key="i">
+                                <span class="ab-date">{{ a.f }}</span>
+                                <span class="mono ab-amt">{{ symOf(form.moneda) }} {{ fmt(a.m) }}</span>
+                                <button type="button" class="icon-btn sm danger" title="Borrar este abono" @click="delAbonoForm(i)"><icon name="trash"></icon></button>
+                            </li>
+                        </ul>
+                        <p v-else class="ab-empty">Sin abonos registrados. Si el “Total abonado” no es correcto, ajústalo aquí (ej. ponlo en 0 si no has pagado nada).</p>
+                    </div>
+
+                    <div class="modal-foot">
+                        <button type="button" class="btn" @click="form.id ? (formMode = 'view') : closeForm()">{{ form.id ? 'Volver' : 'Cancelar' }}</button>
+                        <button type="submit" class="btn primary" :disabled="saving">{{ saving ? 'Guardando…' : (form.id ? 'Guardar cambios' : 'Agregar deuda') }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </transition>
+
+    <!-- Modal meta -->
+    <transition name="fade">
+        <div v-if="showMetaForm" class="modal-scrim" @click.self="closeMetaForm">
+            <div class="modal">
+                <div class="modal-head"><h2>{{ metaForm.id ? 'Editar meta' : 'Nueva meta' }}</h2><button class="icon-btn" @click="closeMetaForm"><icon name="close"></icon></button></div>
+                <form @submit.prevent="saveMeta" class="modal-body">
+                    <div class="type-toggle three">
+                        <button type="button" :class="{ active: metaForm.tipo === 'simple' }" @click="metaForm.tipo = 'simple'"><icon name="piggy"></icon> Simple</button>
+                        <button type="button" :class="{ active: metaForm.tipo === 'flexible' }" @click="metaForm.tipo = 'flexible'"><icon name="zap"></icon> Flexible</button>
+                        <button type="button" :class="{ active: metaForm.tipo === 'fija' }" @click="metaForm.tipo = 'fija'"><icon name="lock"></icon> Fija</button>
+                    </div>
+                    <p class="rec-hint">{{ metaForm.tipo === 'simple' ? 'Ahorro normal, sin intereses: pones una meta y vas metiendo aportes.' : metaForm.tipo === 'flexible' ? 'Con rendimiento (APY) y retiro cuando quieras.' : 'Con rendimiento (APY) mayor, bloqueado por un plazo.' }}</p>
+                    <label class="field full">Nombre de la meta<input v-model="metaForm.nombre" type="text" placeholder="Ej: Fondo de emergencia" required></label>
+                    <div class="field-row">
+                        <label class="field">Moneda<select v-model="metaForm.moneda"><option value="USDT">USDT</option><option value="USD">USD</option><option value="BS">Bolívares (Bs)</option></select></label>
+                        <label class="field">Meta a alcanzar<input v-model.number="metaForm.objetivo" type="number" min="0" step="0.01" placeholder="0.00" required></label>
+                    </div>
+                    <div class="field-row">
+                        <label class="field">Ya ahorrado<input v-model.number="metaForm.ahorrado" type="number" min="0" step="0.01" placeholder="0.00"></label>
+                        <label class="field" v-if="metaForm.tipo !== 'simple'">APY (% anual)<input v-model.number="metaForm.apy" type="number" min="0" step="0.1" placeholder="8"></label>
+                    </div>
+                    <div class="field-row">
+                        <label class="field">Aporte mensual <span class="opt">(opcional)</span><input v-model.number="metaForm.aporte_mensual" type="number" min="0" step="0.01" placeholder="0.00"></label>
+                        <label class="field" v-if="metaForm.tipo === 'fija'">Plazo (meses)<input v-model.number="metaForm.plazo_meses" type="number" min="1" max="60" placeholder="6"></label>
+                    </div>
+                    <div class="modal-foot"><button type="button" class="btn" @click="closeMetaForm">Cancelar</button><button type="submit" class="btn primary" :disabled="savingMeta">{{ savingMeta ? 'Guardando…' : (metaForm.id ? 'Guardar' : 'Crear meta') }}</button></div>
+                </form>
+            </div>
+        </div>
+    </transition>
+
+    <!-- Modal gasto -->
+    <transition name="fade">
+        <div v-if="showGastoForm" class="modal-scrim" @click.self="closeGastoForm">
+            <div class="modal">
+                <div class="modal-head"><h2>{{ gastoForm.id ? 'Editar gasto' : 'Nuevo gasto' }}</h2><button class="icon-btn" @click="closeGastoForm"><icon name="close"></icon></button></div>
+                <form @submit.prevent="saveGasto" class="modal-body">
+                    <label class="field full">Descripción<input v-model="gastoForm.descripcion" type="text" placeholder="Ej: Mercado, gasolina, Netflix…"></label>
+                    <label class="field">Categoría
+                        <div class="cat-grid">
+                            <button type="button" v-for="c in CATEGORIAS" :key="c.id" class="cat-btn" :class="{ active: gastoForm.categoria === c.id }" @click="gastoForm.categoria = c.id">{{ c.emoji }} {{ c.label }}</button>
+                        </div>
+                    </label>
+                    <div class="field-row">
+                        <label class="field">Moneda
+                            <div class="cur-seg">
+                                <button type="button" v-for="mm in monedas" :key="mm" :class="{ active: gastoForm.moneda === mm }" :style="gastoForm.moneda === mm ? { borderColor: curColor(mm), color: curColor(mm) } : {}" @click="gastoForm.moneda = mm">{{ symOf(mm) }}</button>
+                            </div>
+                        </label>
+                        <label class="field">Monto<input v-model.number="gastoForm.monto" type="number" step="0.01" min="0" placeholder="0.00" required></label>
+                    </div>
+                    <label class="field">Fecha<date-field v-model="gastoForm.fecha"></date-field></label>
+                    <div class="modal-foot"><button type="button" class="btn" @click="closeGastoForm">Cancelar</button><button type="submit" class="btn primary" :disabled="savingGasto">{{ savingGasto ? 'Guardando…' : (gastoForm.id ? 'Guardar' : 'Agregar gasto') }}</button></div>
+                </form>
+            </div>
+        </div>
+    </transition>
+
+    <!-- Modal editar perfil -->
+    <transition name="fade">
+        <div v-if="showProfileForm" class="modal-scrim" @click.self="closeProfileForm">
+            <div class="modal modal-wide">
+                <div class="modal-head"><h2>Editar perfil</h2><button class="icon-btn" @click="closeProfileForm"><icon name="close"></icon></button></div>
+                <div class="modal-body">
+                    <div class="pf-avatar-row">
+                        <avatar :avatar="profileDraft.avatar" :name="((profileDraft.nombre || '') + ' ' + (profileDraft.apellido || '')).trim() || user.email" :size="58"></avatar>
+                        <div class="pf-ar-txt"><b>Elige tu avatar</b><small>Logos generados, sin foto ni correo</small></div>
+                    </div>
+                    <div class="ava-picker">
+                        <button type="button" class="ava-opt" :class="{ active: !profileDraft.avatar }" @click="profileDraft.avatar = ''" title="Tu inicial">
+                            <avatar :avatar="''" :name="((profileDraft.nombre || '') + ' ' + (profileDraft.apellido || '')).trim() || user.email" :size="46"></avatar>
+                        </button>
+                        <button type="button" class="ava-opt" v-for="(av, id) in AVATARS" :key="id" :class="{ active: profileDraft.avatar === id }" @click="profileDraft.avatar = id" :title="av.label">
+                            <avatar :avatar="id" :size="46"></avatar>
+                        </button>
+                    </div>
+                    <div class="field-row">
+                        <label class="field">Nombre<input v-model="profileDraft.nombre" type="text" placeholder="Primer nombre" maxlength="40"></label>
+                        <label class="field">Apellido<input v-model="profileDraft.apellido" type="text" placeholder="Apellido" maxlength="40"></label>
+                    </div>
+                    <div class="field-row">
+                        <label class="field">Correo<input :value="user.email" type="text" disabled></label>
+                        <label class="field">País
+                            <select v-model="profileDraft.pais">
+                                <option value="">Selecciona tu país</option>
+                                <option v-for="c in COUNTRIES" :key="c.code" :value="c.code">{{ c.flag }} {{ c.name }}</option>
+                            </select>
+                        </label>
+                    </div>
+                    <p class="pf-tz-note" v-if="profileDraft.pais">
+                        <icon name="clock"></icon> Zona horaria automática: <b>{{ (COUNTRIES.find(c => c.code === profileDraft.pais) || {}).tz }}</b>
+                    </p>
+                    <p class="pf-tz-note muted" v-else><icon name="clock"></icon> Elige tu país y la zona horaria se ajusta sola.</p>
+
+                    <div class="pf-danger">
+                        <div class="pf-danger-head"><b>¿Borrar tu cuenta?</b><small>Elimina tu acceso y todos tus datos (deudas, metas, gastos). No se puede deshacer.</small></div>
+                        <button v-if="!confirmDelete" type="button" class="btn danger-ghost" @click="confirmDelete = true"><icon name="trash"></icon> Borrar cuenta</button>
+                        <div v-else class="pf-confirm">
+                            <span class="pf-confirm-txt"><icon name="alert"></icon> Esto es permanente. ¿Seguro?</span>
+                            <div class="pf-confirm-actions">
+                                <button type="button" class="btn" @click="confirmDelete = false">Cancelar</button>
+                                <button type="button" class="btn danger-solid" :disabled="deleting" @click="deleteAccount">{{ deleting ? 'Borrando…' : 'Sí, borrar todo' }}</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-foot"><button type="button" class="btn" @click="closeProfileForm">Cerrar</button><button type="button" class="btn primary" @click="saveProfile">Guardar cambios</button></div>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <transition name="toast"><div v-if="toast.show" class="toast" :class="toast.type">{{ toast.msg }}</div></transition>
+    </template>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="vendor/motion.min.js"></script>
+<script src="vendor/Sortable.min.js"></script>
+<script src="vendor/vue.global.prod.js"></script>
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>
+</body>
+</html>

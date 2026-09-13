@@ -1,0 +1,13 @@
+# Datos locales y secretos del entorno Docker heredado
+legacy-docker/data/
+legacy-docker/.env
+legacy-docker/vendor/
+
+# Node / Sistema operativo
+node_modules/
+.DS_Store
+Thumbs.db
+
+graphify-out/.graphify_python
+graphify-out/graph.html
+graphify-out/cost.json
