@@ -279,11 +279,11 @@
                             </div>
                             <div class="dcell" data-l="Estado"><span class="pill" :class="d.estado">{{ d.estado }}</span></div>
                             <div class="dcell actions">
-                                <button class="icon-btn sm" title="Ver detalle" @click="openForm(d, 'view')"><icon name="eye"></icon></button>
-                                <button v-if="d.estado !== 'pagada'" class="icon-btn sm" :title="d.recurrente ? 'Abonar parcial' : 'Registrar abono'" @click="abonar(d)"><icon name="cash"></icon></button>
-                                <button class="icon-btn sm" :title="d.recurrente && d.estado !== 'pagada' ? 'Pagué la cuota del mes' : (d.estado === 'pagada' ? 'Marcar pendiente' : 'Marcar pagada')" @click="toggleEstado(d)"><icon :name="d.recurrente && d.estado !== 'pagada' ? 'repeat' : 'check'"></icon></button>
-                                <button class="icon-btn sm" title="Editar" @click="openForm(d, 'edit')"><icon name="edit"></icon></button>
-                                <button class="icon-btn sm danger" title="Eliminar" @click="del(d)"><icon name="trash"></icon></button>
+                                <button class="icon-btn sm act-ver" title="Ver detalle" @click="openForm(d, 'view')"><icon name="eye"></icon></button>
+                                <button v-if="d.estado !== 'pagada'" class="icon-btn sm act-abonar" :title="d.recurrente ? 'Abonar parcial' : 'Registrar abono'" @click="abonar(d)"><icon name="cash"></icon></button>
+                                <button class="icon-btn sm act-pagar" :title="d.recurrente && d.estado !== 'pagada' ? 'Pagué la cuota del mes' : (d.estado === 'pagada' ? 'Marcar pendiente' : 'Marcar pagada')" @click="toggleEstado(d)"><icon :name="d.recurrente && d.estado !== 'pagada' ? 'repeat' : 'check'"></icon></button>
+                                <button class="icon-btn sm act-editar" title="Editar" @click="openForm(d, 'edit')"><icon name="edit"></icon></button>
+                                <button class="icon-btn sm act-eliminar" title="Eliminar" @click="del(d)"><icon name="trash"></icon></button>
                             </div>
                         </div>
                     </transition-group>
@@ -322,8 +322,8 @@
                             <button v-if="s.subestado !== 'pagada'" class="btn primary btn-sm" @click="pagarMes(s)"><icon name="check"></icon> Pagué este mes</button>
                             <span v-else class="sub-done"><icon name="check"></icon> Listo por este mes</span>
                             <span v-if="s.pagos_realizados" class="sub-pagos">{{ s.pagos_realizados }} pagos</span>
-                            <button class="icon-btn sm" title="Ver detalle" @click="openForm(s, 'view')"><icon name="eye"></icon></button>
-                            <button class="icon-btn sm danger" title="Eliminar" @click="del(s)"><icon name="trash"></icon></button>
+                            <button class="icon-btn sm act-ver" title="Ver detalle" @click="openForm(s, 'view')"><icon name="eye"></icon></button>
+                            <button class="icon-btn sm act-eliminar" title="Eliminar" @click="del(s)"><icon name="trash"></icon></button>
                         </div>
                     </article>
                 </div>
@@ -667,8 +667,8 @@
                                 <span class="gr-emoji">{{ catInfo(g.categoria).emoji }}</span>
                                 <div class="gr-main"><b>{{ g.descripcion || catInfo(g.categoria).label }}</b><small>{{ catInfo(g.categoria).label }} · {{ g.fecha }}</small></div>
                                 <span class="mono gr-amt" :style="{ color: curColor(g.moneda) }">{{ symOf(g.moneda) }} {{ fmt(g.monto) }}</span>
-                                <button class="icon-btn sm" title="Editar" @click="openGastoForm(g)"><icon name="edit"></icon></button>
-                                <button class="icon-btn sm danger" title="Eliminar" @click="delGasto(g)"><icon name="trash"></icon></button>
+                                <button class="icon-btn sm act-editar" title="Editar" @click="openGastoForm(g)"><icon name="edit"></icon></button>
+                                <button class="icon-btn sm act-eliminar" title="Eliminar" @click="delGasto(g)"><icon name="trash"></icon></button>
                             </li>
                         </ul>
                         <p v-else class="empty">Aún no registras gastos reales. Agrega el primero con “Nuevo gasto”.</p>
@@ -727,8 +727,8 @@
                         <div class="meta-actions">
                             <button class="btn primary btn-sm" @click="aportarMeta(m)"><icon name="plus"></icon> Aportar</button>
                             <button class="icon-btn sm" title="Retirar" @click="quitarAporte(m)"><icon name="minus"></icon></button>
-                            <button class="icon-btn sm" title="Editar" @click="openMetaForm(m)"><icon name="edit"></icon></button>
-                            <button class="icon-btn sm danger" title="Eliminar" @click="delMeta(m)"><icon name="trash"></icon></button>
+                            <button class="icon-btn sm act-editar" title="Editar" @click="openMetaForm(m)"><icon name="edit"></icon></button>
+                            <button class="icon-btn sm act-eliminar" title="Eliminar" @click="delMeta(m)"><icon name="trash"></icon></button>
                         </div>
                     </article>
                 </div>
@@ -970,7 +970,7 @@
                             <li v-for="(a, i) in form.abonos" :key="i">
                                 <span class="ab-date">{{ a.f }}</span>
                                 <span class="mono ab-amt">{{ symOf(form.moneda) }} {{ fmt(a.m) }}</span>
-                                <button type="button" class="icon-btn sm danger" title="Borrar este abono" @click="delAbonoForm(i)"><icon name="trash"></icon></button>
+                                <button type="button" class="icon-btn sm act-eliminar" title="Borrar este abono" @click="delAbonoForm(i)"><icon name="trash"></icon></button>
                             </li>
                         </ul>
                         <p v-else class="ab-empty">Sin abonos registrados. Si el “Total abonado” no es correcto, ajústalo aquí (ej. ponlo en 0 si no has pagado nada).</p>
