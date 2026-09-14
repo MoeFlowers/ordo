@@ -19,7 +19,7 @@
 
     <!-- ===== Cargando ===== -->
     <div v-if="!ready" class="boot">
-        <span class="boot-mark"></span>
+        <span class="boot-logo"><img src="icons/logo.svg" alt="Ordo"><span class="boot-ring"></span></span>
         <p>Cargando Ordo…</p>
     </div>
 
@@ -245,7 +245,15 @@
                         <span>Descripción</span><span>Contraparte</span><span class="ta-r">Monto</span>
                         <span class="ta-r">Saldo</span><span>Vence</span><span>Estado</span><span></span>
                     </div>
-                    <transition-group name="list" tag="div">
+                    <div v-if="loadingData" class="skel-list">
+                        <div v-for="n in 5" :key="n" class="skel-row">
+                            <span class="skel skel-dot"></span>
+                            <span class="skel skel-line lg"></span>
+                            <span class="skel skel-line sm"></span>
+                            <span class="skel skel-pill"></span>
+                        </div>
+                    </div>
+                    <transition-group v-else name="list" tag="div">
                         <div v-for="d in filtered" :key="d.id" class="drow" :class="{ paid: d.estado === 'pagada' }">
                             <div class="dcell desc" data-l="Descripción">
                                 <span class="type-dot" :class="d.tipo"></span>
@@ -279,7 +287,7 @@
                             </div>
                         </div>
                     </transition-group>
-                    <p v-if="!filtered.length" class="empty big">
+                    <p v-if="!loadingData && !filtered.length" class="empty big">
                         <icon name="debts"></icon>
                         {{ deudas.length ? 'Nada en este filtro.' : 'Aún no registras deudas. Crea la primera con “Nueva deuda”.' }}
                     </p>
@@ -866,7 +874,7 @@
                         <button type="button" :class="{ active: form.tipo === 'por_pagar' }" @click="form.tipo = 'por_pagar'"><span class="type-dot por_pagar"></span> Yo debo</button>
                         <button type="button" :class="{ active: form.tipo === 'por_cobrar' }" @click="form.tipo = 'por_cobrar'"><span class="type-dot por_cobrar"></span> Me deben</button>
                     </div>
-                    <label class="field full">Descripción<input v-model="form.descripcion" type="text" placeholder="Ej: Escritorio, préstamo, alquiler…" required></label>
+                    <label class="field full">Descripción<input v-model="form.descripcion" type="text" placeholder="Ej: Escritorio, préstamo, alquiler…" :class="{ invalid: formErrors.descripcion }" @input="dropErr(formErrors,'descripcion')"><small v-if="formErrors.descripcion" class="field-err">{{ formErrors.descripcion }}</small></label>
 
                     <label class="rec-toggle cashea-toggle" :class="{ on: esFinanciado(form) }">
                         <input type="checkbox" :checked="esFinanciado(form)" @change="toggleFinanciado($event.target.checked)">
@@ -907,7 +915,7 @@
                     <div class="field-row">
                         <label class="field">{{ esFinanciado(form) ? 'Tienda / comercio' : (form.tipo === 'por_pagar' ? 'A quién le debes' : 'Quién te debe') }}<input v-model="form.contraparte" type="text" placeholder="Nombre"></label>
                         <label class="field" v-if="!esFinanciado(form) && !form.recurrente">Fecha de vencimiento<date-field v-model="form.fecha_vencimiento"></date-field></label>
-                        <label class="field" v-else-if="!esFinanciado(form)">Día de pago (1–31)<input v-model.number="form.dia_pago" type="number" min="1" max="31" placeholder="Ej: 2"></label>
+                        <label class="field" v-else-if="!esFinanciado(form)">Día de pago (1–31)<input v-model.number="form.dia_pago" type="number" min="1" max="31" placeholder="Ej: 2" :class="{ invalid: formErrors.dia_pago }" @input="dropErr(formErrors,'dia_pago')"><small v-if="formErrors.dia_pago" class="field-err">{{ formErrors.dia_pago }}</small></label>
                     </div>
                     <div class="field-row">
                         <label class="field">Moneda
@@ -915,7 +923,7 @@
                                 <button type="button" v-for="mm in monedas" :key="mm" :class="{ active: form.moneda === mm }" :style="form.moneda === mm ? { borderColor: curColor(mm), color: curColor(mm) } : {}" @click="form.moneda = mm">{{ symOf(mm) }}</button>
                             </div>
                         </label>
-                        <label class="field" v-if="!esFinanciado(form)">Monto<input v-model.number="form.monto" type="number" step="0.01" min="0" placeholder="0.00" required></label>
+                        <label class="field" v-if="!esFinanciado(form)">Monto<input v-model.number="form.monto" type="number" step="0.01" min="0" placeholder="0.00" :class="{ invalid: formErrors.monto }" @input="dropErr(formErrors,'monto')"><small v-if="formErrors.monto" class="field-err">{{ formErrors.monto }}</small></label>
                     </div>
 
                     <div v-if="esFinanciado(form)" class="cashea-box" :style="{ borderLeftColor: credColor(form.plan) }">
@@ -928,6 +936,7 @@
                             <label class="field">Cuotas ya pagadas<input v-model.number="form.cuotas_pagadas" type="number" min="0" :max="form.n_cuotas"></label>
                         </div>
                         <button type="button" class="btn btn-xs cashea-gen" @click="generarCuotas"><icon name="repeat"></icon> Generar cuotas</button>
+                        <small v-if="formErrors.cuotas" class="field-err">{{ formErrors.cuotas }}</small>
                         <ul class="cuota-list" v-if="form.cuotas && form.cuotas.length">
                             <li v-for="(c, i) in form.cuotas" :key="i" :class="{ pagada: c.pagada }" @click="toggleCuota(i)">
                                 <span class="cuota-check"><icon :name="c.pagada ? 'check' : 'clock'"></icon></span>
@@ -952,7 +961,8 @@
                         </div>
                         <div class="ab-total">
                             <label class="field">Total abonado
-                                <input v-model.number="form.monto_abonado" type="number" min="0" step="0.01" placeholder="0.00">
+                                <input v-model.number="form.monto_abonado" type="number" min="0" step="0.01" placeholder="0.00" :class="{ invalid: formErrors.monto_abonado }" @input="dropErr(formErrors,'monto_abonado')">
+                                <small v-if="formErrors.monto_abonado" class="field-err">{{ formErrors.monto_abonado }}</small>
                             </label>
                             <span class="ab-saldo">Saldo pendiente: <b class="mono">{{ symOf(form.moneda) }} {{ fmt(Math.max(0, (Number(form.monto)||0) - (Number(form.monto_abonado)||0))) }}</b></span>
                         </div>
@@ -968,7 +978,7 @@
 
                     <div class="modal-foot">
                         <button type="button" class="btn" @click="form.id ? (formMode = 'view') : closeForm()">{{ form.id ? 'Volver' : 'Cancelar' }}</button>
-                        <button type="submit" class="btn primary" :disabled="saving">{{ saving ? 'Guardando…' : (form.id ? 'Guardar cambios' : 'Agregar deuda') }}</button>
+                        <button type="submit" class="btn primary" :disabled="saving"><span v-if="saving" class="btn-spin"></span>{{ saving ? 'Guardando…' : (form.id ? 'Guardar cambios' : 'Agregar deuda') }}</button>
                     </div>
                 </form>
             </div>
@@ -987,10 +997,10 @@
                         <button type="button" :class="{ active: metaForm.tipo === 'fija' }" @click="metaForm.tipo = 'fija'"><icon name="lock"></icon> Fija</button>
                     </div>
                     <p class="rec-hint">{{ metaForm.tipo === 'simple' ? 'Ahorro normal, sin intereses: pones una meta y vas metiendo aportes.' : metaForm.tipo === 'flexible' ? 'Con rendimiento (APY) y retiro cuando quieras.' : 'Con rendimiento (APY) mayor, bloqueado por un plazo.' }}</p>
-                    <label class="field full">Nombre de la meta<input v-model="metaForm.nombre" type="text" placeholder="Ej: Fondo de emergencia" required></label>
+                    <label class="field full">Nombre de la meta<input v-model="metaForm.nombre" type="text" placeholder="Ej: Fondo de emergencia" :class="{ invalid: metaErrors.nombre }" @input="dropErr(metaErrors,'nombre')"><small v-if="metaErrors.nombre" class="field-err">{{ metaErrors.nombre }}</small></label>
                     <div class="field-row">
                         <label class="field">Moneda<select v-model="metaForm.moneda"><option value="USDT">USDT</option><option value="USD">USD</option><option value="BS">Bolívares (Bs)</option></select></label>
-                        <label class="field">Meta a alcanzar<input v-model.number="metaForm.objetivo" type="number" min="0" step="0.01" placeholder="0.00" required></label>
+                        <label class="field">Meta a alcanzar<input v-model.number="metaForm.objetivo" type="number" min="0" step="0.01" placeholder="0.00" :class="{ invalid: metaErrors.objetivo }" @input="dropErr(metaErrors,'objetivo')"><small v-if="metaErrors.objetivo" class="field-err">{{ metaErrors.objetivo }}</small></label>
                     </div>
                     <div class="field-row">
                         <label class="field">Ya ahorrado<input v-model.number="metaForm.ahorrado" type="number" min="0" step="0.01" placeholder="0.00"></label>
@@ -998,9 +1008,9 @@
                     </div>
                     <div class="field-row">
                         <label class="field">Aporte mensual <span class="opt">(opcional)</span><input v-model.number="metaForm.aporte_mensual" type="number" min="0" step="0.01" placeholder="0.00"></label>
-                        <label class="field" v-if="metaForm.tipo === 'fija'">Plazo (meses)<input v-model.number="metaForm.plazo_meses" type="number" min="1" max="60" placeholder="6"></label>
+                        <label class="field" v-if="metaForm.tipo === 'fija'">Plazo (meses)<input v-model.number="metaForm.plazo_meses" type="number" min="1" max="60" placeholder="6" :class="{ invalid: metaErrors.plazo_meses }" @input="dropErr(metaErrors,'plazo_meses')"><small v-if="metaErrors.plazo_meses" class="field-err">{{ metaErrors.plazo_meses }}</small></label>
                     </div>
-                    <div class="modal-foot"><button type="button" class="btn" @click="closeMetaForm">Cancelar</button><button type="submit" class="btn primary" :disabled="savingMeta">{{ savingMeta ? 'Guardando…' : (metaForm.id ? 'Guardar' : 'Crear meta') }}</button></div>
+                    <div class="modal-foot"><button type="button" class="btn" @click="closeMetaForm">Cancelar</button><button type="submit" class="btn primary" :disabled="savingMeta"><span v-if="savingMeta" class="btn-spin"></span>{{ savingMeta ? 'Guardando…' : (metaForm.id ? 'Guardar' : 'Crear meta') }}</button></div>
                 </form>
             </div>
         </div>
@@ -1024,10 +1034,10 @@
                                 <button type="button" v-for="mm in monedas" :key="mm" :class="{ active: gastoForm.moneda === mm }" :style="gastoForm.moneda === mm ? { borderColor: curColor(mm), color: curColor(mm) } : {}" @click="gastoForm.moneda = mm">{{ symOf(mm) }}</button>
                             </div>
                         </label>
-                        <label class="field">Monto<input v-model.number="gastoForm.monto" type="number" step="0.01" min="0" placeholder="0.00" required></label>
+                        <label class="field">Monto<input v-model.number="gastoForm.monto" type="number" step="0.01" min="0" placeholder="0.00" :class="{ invalid: gastoErrors.monto }" @input="dropErr(gastoErrors,'monto')"><small v-if="gastoErrors.monto" class="field-err">{{ gastoErrors.monto }}</small></label>
                     </div>
-                    <label class="field">Fecha<date-field v-model="gastoForm.fecha"></date-field></label>
-                    <div class="modal-foot"><button type="button" class="btn" @click="closeGastoForm">Cancelar</button><button type="submit" class="btn primary" :disabled="savingGasto">{{ savingGasto ? 'Guardando…' : (gastoForm.id ? 'Guardar' : 'Agregar gasto') }}</button></div>
+                    <label class="field">Fecha<date-field v-model="gastoForm.fecha"></date-field><small v-if="gastoErrors.fecha" class="field-err">{{ gastoErrors.fecha }}</small></label>
+                    <div class="modal-foot"><button type="button" class="btn" @click="closeGastoForm">Cancelar</button><button type="submit" class="btn primary" :disabled="savingGasto"><span v-if="savingGasto" class="btn-spin"></span>{{ savingGasto ? 'Guardando…' : (gastoForm.id ? 'Guardar' : 'Agregar gasto') }}</button></div>
                 </form>
             </div>
         </div>

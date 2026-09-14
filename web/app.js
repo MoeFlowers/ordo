@@ -197,6 +197,7 @@ createApp({
 
         /* ---------- Estado app ---------- */
         const deudas = ref([]);
+        const loadingData = ref(true);
         const rates = reactive({ bcv: null, usdt: null, eur: null });
         const ratesInfo = reactive({ fecha: '', manual: false });
         const loadingRates = ref(false);
@@ -330,7 +331,11 @@ createApp({
         /* ---------- Autenticación ---------- */
         function toggleAuthMode() { authMode.value = authMode.value === 'login' ? 'signup' : 'login'; authError.value = ''; authNotice.value = ''; }
         async function authSubmit() {
-            authError.value = ''; authNotice.value = ''; authLoading.value = true;
+            authError.value = ''; authNotice.value = '';
+            const email = (authEmail.value || '').trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { authError.value = 'Escribe un correo válido.'; return; }
+            if ((authPassword.value || '').length < 6) { authError.value = 'La contraseña debe tener al menos 6 caracteres.'; return; }
+            authLoading.value = true;
             try {
                 if (authMode.value === 'login') {
                     const { error } = await supa.auth.signInWithPassword({ email: authEmail.value, password: authPassword.value });
@@ -393,8 +398,50 @@ createApp({
                 const av = a.fecha_vencimiento || '9999-12-31', bv = b.fecha_vencimiento || '9999-12-31';
                 return av < bv ? -1 : av > bv ? 1 : b.id - a.id;
             });
+            loadingData.value = false;
         }
+
+        /* ---------- Validación de formularios (evita datos malos / errores del servidor) ---------- */
+        const formErrors = reactive({});
+        const metaErrors = reactive({});
+        const gastoErrors = reactive({});
+        const clearErr = (o) => Object.keys(o).forEach((k) => delete o[k]);
+        const dropErr = (o, k) => { if (o && o[k]) delete o[k]; };
+        const isNum = (v) => v !== '' && v !== null && v !== undefined && isFinite(Number(v));
+        function validateDebt() {
+            clearErr(formErrors);
+            const fin = esFinanciado(form);
+            if (!(form.descripcion || '').trim()) formErrors.descripcion = 'Escribe una descripción.';
+            if (fin) {
+                if (!(Array.isArray(form.cuotas) && form.cuotas.length)) formErrors.cuotas = 'Genera las cuotas antes de guardar.';
+            } else {
+                if (!isNum(form.monto) || Number(form.monto) <= 0) formErrors.monto = 'El monto debe ser mayor que 0.';
+                if (form.recurrente) { const d = Number(form.dia_pago); if (!(d >= 1 && d <= 31)) formErrors.dia_pago = 'Día entre 1 y 31.'; }
+                const ab = Number(form.monto_abonado) || 0, m = Number(form.monto) || 0;
+                if (ab < 0) formErrors.monto_abonado = 'No puede ser negativo.';
+                else if (m > 0 && ab > m + 0.001) formErrors.monto_abonado = 'El abonado supera el monto.';
+            }
+            return Object.keys(formErrors).length === 0;
+        }
+        function validateMeta() {
+            clearErr(metaErrors);
+            if (!(metaForm.nombre || '').trim()) metaErrors.nombre = 'Escribe un nombre.';
+            if (!isNum(metaForm.objetivo) || Number(metaForm.objetivo) <= 0) metaErrors.objetivo = 'La meta debe ser mayor que 0.';
+            if (Number(metaForm.ahorrado) < 0) metaErrors.ahorrado = 'No puede ser negativo.';
+            if (metaForm.tipo !== 'simple' && Number(metaForm.apy) < 0) metaErrors.apy = 'No puede ser negativo.';
+            if (metaForm.tipo === 'fija') { const pl = Number(metaForm.plazo_meses); if (!(pl >= 1 && pl <= 60)) metaErrors.plazo_meses = 'Entre 1 y 60 meses.'; }
+            if (Number(metaForm.aporte_mensual) < 0) metaErrors.aporte_mensual = 'No puede ser negativo.';
+            return Object.keys(metaErrors).length === 0;
+        }
+        function validateGasto() {
+            clearErr(gastoErrors);
+            if (!isNum(gastoForm.monto) || Number(gastoForm.monto) <= 0) gastoErrors.monto = 'El monto debe ser mayor que 0.';
+            if (!gastoForm.fecha) gastoErrors.fecha = 'Elige una fecha.';
+            return Object.keys(gastoErrors).length === 0;
+        }
+
         async function save() {
+            if (!validateDebt()) return notify('Revisa los campos marcados', 'error');
             saving.value = true;
             const esCashea = esFinanciado(form);
             const recurrente = !esCashea && !!form.recurrente;
@@ -593,7 +640,7 @@ createApp({
         }
 
         /* ---------- Formulario / navegación ---------- */
-        function openForm(d, mode = 'edit') { Object.assign(form, d ? { ...d } : blankForm()); if (esFinanciado(form)) form.plan = credLabel(form.plan); formMode.value = d ? mode : 'edit'; provAdding.value = false; showForm.value = true; }
+        function openForm(d, mode = 'edit') { clearErr(formErrors); Object.assign(form, d ? { ...d } : blankForm()); if (esFinanciado(form)) form.plan = credLabel(form.plan); formMode.value = d ? mode : 'edit'; provAdding.value = false; showForm.value = true; }
         function closeForm() { showForm.value = false; }
         function editForm() { formMode.value = 'edit'; }
         function go(view) { currentView.value = view; sidebarOpen.value = false; location.hash = view; }
@@ -1000,9 +1047,10 @@ createApp({
             const { data, error } = await supa.from('metas').select('*').order('id', { ascending: false });
             metas.value = error ? [] : (data || []);
         }
-        function openMetaForm(m) { Object.assign(metaForm, m ? { ...m } : blankMeta()); showMetaForm.value = true; }
+        function openMetaForm(m) { clearErr(metaErrors); Object.assign(metaForm, m ? { ...m } : blankMeta()); showMetaForm.value = true; }
         function closeMetaForm() { showMetaForm.value = false; }
         async function saveMeta() {
+            if (!validateMeta()) return notify('Revisa los campos marcados', 'error');
             savingMeta.value = true;
             const p = {
                 nombre: (metaForm.nombre || '').trim() || 'Meta', moneda: metaForm.moneda,
@@ -1279,9 +1327,10 @@ createApp({
             if (error) { if (missingGastos(error.message)) gastosAvailable.value = false; gastosReales.value = []; return; }
             gastosAvailable.value = true; gastosReales.value = data || [];
         }
-        function openGastoForm(g) { Object.assign(gastoForm, g ? { ...g } : blankGasto()); showGastoForm.value = true; }
+        function openGastoForm(g) { clearErr(gastoErrors); Object.assign(gastoForm, g ? { ...g } : blankGasto()); showGastoForm.value = true; }
         function closeGastoForm() { showGastoForm.value = false; }
         async function saveGasto() {
+            if (!validateGasto()) return notify('Revisa los campos marcados', 'error');
             savingGasto.value = true;
             const p = { fecha: gastoForm.fecha || isoDate(todayMidnight()), categoria: gastoForm.categoria || 'otros', descripcion: (gastoForm.descripcion || '').trim(), monto: Number(gastoForm.monto) || 0, moneda: gastoForm.moneda };
             let error;
@@ -1389,7 +1438,8 @@ createApp({
 
         return {
             ready, user, authMode, authEmail, authPassword, authError, authNotice, authLoading, showPassword, recovering, newPassword, toggleAuthMode, authSubmit, logout, resetPassword, setNewPassword,
-            deudas, rates, ratesInfo, loadingRates, currentView, verMoneda, filtro, sidebarOpen, showForm, saving, toast,
+            deudas, loadingData, rates, ratesInfo, loadingRates, currentView, verMoneda, filtro, sidebarOpen, showForm, saving, toast,
+            formErrors, metaErrors, gastoErrors, dropErr,
             monedas, nav, form, formMode, filtros, planCfg,
             symOf, curColor, sym, fmt, fmtShort, dueDays, dueClass, fmtDate,
             loadRates, editRates, openForm, closeForm, editForm, save, abonar, toggleEstado, del, go, addAbonoForm, delAbonoForm,
