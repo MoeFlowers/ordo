@@ -317,8 +317,7 @@ body {
 .icon-btn.sm { width: 32px; height: 32px; }
 .icon-btn.sm svg { width: 16px; height: 16px; }
 .icon-btn.danger:hover { color: var(--pay); border-color: rgba(255,107,129,.4); }
-/* Acciones con color por tipo (líneas del ícono coloreadas; fondo neutro) */
-.icon-btn[class*="act-"] { color: var(--ac); }
+/* Acciones: neutras en reposo; al pasar el ratón brillan en su color */
 .icon-btn[class*="act-"]:hover { color: var(--ac); background: color-mix(in srgb, var(--ac) 15%, transparent); border-color: color-mix(in srgb, var(--ac) 42%, transparent); }
 .act-ver { --ac: #4C8DFF; }       /* ver — azul */
 .act-abonar { --ac: #2FBE86; }    /* abonar — verde */
