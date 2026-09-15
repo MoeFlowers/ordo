@@ -239,6 +239,7 @@ createApp({
             { id: 'pendientes', label: 'Acciones pendientes',    desc: 'Correo y contraseña de la BD',   icon: 'bell',     group: 'Sistema' },
             { id: 'respaldo',   label: 'Respaldo y exportación', desc: 'Descarga tus datos (CSV/JSON)',  icon: 'download', group: 'Sistema' },
             { id: 'cuenta',     label: 'Cuenta',                 desc: 'Editar perfil y cerrar sesión',  icon: 'logout',   group: 'Cuenta' },
+            { id: 'legal',      label: 'Términos y privacidad',  desc: 'Cómo se usan y protegen tus datos', icon: 'lock',   group: 'Cuenta' },
         ];
         const settingsGroups = ['Perfil', 'Sistema', 'Cuenta'].map((g) => ({ name: g, items: settingsSections.filter((s) => s.group === g) }));
         const settingsCur = computed(() => settingsSections.find((s) => s.id === (settingsTab.value || 'perfil')) || settingsSections[0]);
@@ -306,6 +307,7 @@ createApp({
         /* ---------- Bitácora: registro de actividad (local, por dispositivo) ---------- */
         const BITACORA_CAP = 400;
         const bitacora = ref([]);
+        let bitacoraAvailable = true;   // false si la tabla aún no existe (degrada a solo-local)
         try { const raw = JSON.parse(localStorage.getItem('bitacora') || '[]'); if (Array.isArray(raw)) bitacora.value = raw; } catch (e) {}
         const bitacoraFilter = ref('all');
         const bitacoraFilters = [
@@ -328,9 +330,24 @@ createApp({
             gasto_del:  { icon: 'trash',    cls: 'del',  cat: 'gasto' },
         };
         const bitaInfo = (t) => BITA[t] || { icon: 'wallet', cls: 'edit', cat: 'deuda' };
+        const bitaMissing = (m) => /bitacora|relation|schema cache|does not exist|not find/i.test(m || '');
         function logEvent(type, title, detail = '', amount = null, moneda = '') {
-            bitacora.value.unshift({ id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), at: new Date().toISOString(), type, title: title || '—', detail, amount, moneda });
+            const e = { id: 'l' + Date.now() + Math.random().toString(36).slice(2, 6), at: new Date().toISOString(), type, title: title || '—', detail, amount: (amount == null ? null : Number(amount)), moneda: moneda || '' };
+            bitacora.value.unshift(e);
             if (bitacora.value.length > BITACORA_CAP) bitacora.value.length = BITACORA_CAP;
+            try { localStorage.setItem('bitacora', JSON.stringify(bitacora.value)); } catch (e2) {}
+            // Sincroniza a la nube sin bloquear la UI; si la tabla no existe, se queda solo-local
+            if (bitacoraAvailable && user.value) {
+                supa.from('bitacora').insert({ at: e.at, type: e.type, title: e.title, detail: e.detail, amount: e.amount, moneda: e.moneda })
+                    .then(({ error }) => { if (error && bitaMissing(error.message)) bitacoraAvailable = false; });
+            }
+        }
+        async function loadBitacora() {
+            if (!user.value) return;
+            const { data, error } = await supa.from('bitacora').select('id,at,type,title,detail,amount,moneda').order('at', { ascending: false }).limit(BITACORA_CAP);
+            if (error) { if (bitaMissing(error.message)) bitacoraAvailable = false; return; }
+            bitacoraAvailable = true;
+            bitacora.value = (data || []).map((r) => ({ id: r.id, at: r.at, type: r.type, title: r.title, detail: r.detail, amount: r.amount, moneda: r.moneda }));
             try { localStorage.setItem('bitacora', JSON.stringify(bitacora.value)); } catch (e) {}
         }
         function dayLabel(day) {
@@ -352,9 +369,10 @@ createApp({
             }
             return groups;
         });
-        function limpiarBitacora() {
-            if (!confirm('¿Vaciar toda la bitácora? Esto no borra tus deudas, solo el historial de actividad de este dispositivo.')) return;
+        async function limpiarBitacora() {
+            if (!(await confirmAction({ title: 'Vaciar la bitácora', msg: 'Se borrará todo el historial de actividad. Esto NO afecta tus deudas, metas ni gastos.', ok: 'Vaciar' }))) return;
             bitacora.value = []; try { localStorage.removeItem('bitacora'); } catch (e) {}
+            if (bitacoraAvailable && user.value) { try { await supa.from('bitacora').delete().eq('user_id', user.value.id); } catch (e) {} }
             notify('Bitácora vaciada');
         }
 
@@ -367,6 +385,20 @@ createApp({
             heatTip.cell = cell; heatTip.x = x; heatTip.y = r.top; heatTip.show = true;
         }
         const heatLeave = () => { heatTip.show = false; };
+
+        /* ---------- Diálogo de confirmación con diseño (reemplaza confirm() nativo) ---------- */
+        const confirmBox = reactive({ show: false, title: '', msg: '', ok: 'Eliminar', danger: true, _res: null });
+        function confirmAction(opts) {
+            return new Promise((resolve) => {
+                confirmBox.title = opts.title || '¿Confirmar?';
+                confirmBox.msg = opts.msg || '';
+                confirmBox.ok = opts.ok || 'Eliminar';
+                confirmBox.danger = opts.danger !== false;
+                confirmBox._res = resolve;
+                confirmBox.show = true;
+            });
+        }
+        function confirmResolve(v) { confirmBox.show = false; const r = confirmBox._res; confirmBox._res = null; if (r) r(v); }
         const metas = ref([]);
         const showMetaForm = ref(false);
         const savingMeta = ref(false);
@@ -689,7 +721,7 @@ createApp({
             } finally { busy.value = false; }
         }
         async function del(d) {
-            if (!confirm('¿Eliminar "' + d.descripcion + '"?')) return;
+            if (!(await confirmAction({ title: 'Eliminar deuda', msg: `¿Seguro que deseas borrar la deuda “${d.descripcion || 'sin descripción'}”? Esta acción no se puede deshacer.` }))) return;
             if (busy.value) return; busy.value = true;
             try {
                 const { error } = await supa.from('deudas').delete().eq('id', d.id);
@@ -1280,7 +1312,7 @@ createApp({
             } finally { busy.value = false; }
         }
         async function delMeta(m) {
-            if (!confirm('¿Eliminar la meta "' + m.nombre + '"?')) return;
+            if (!(await confirmAction({ title: 'Eliminar meta', msg: `¿Seguro que deseas borrar la meta “${m.nombre || 'sin nombre'}”? Esta acción no se puede deshacer.` }))) return;
             if (busy.value) return; busy.value = true;
             try {
                 const { error } = await supa.from('metas').delete().eq('id', m.id);
@@ -1369,9 +1401,12 @@ createApp({
         const showProfileForm = ref(false);
         const confirmDelete = ref(false);
         const deleting = ref(false);
+        const deleteConfirmText = ref('');
+        const DELETE_PHRASE = 'borrar cuenta';
+        const canDeleteAccount = computed(() => deleteConfirmText.value.trim().toLowerCase() === DELETE_PHRASE);
         const profileDraft = reactive({ nombre: '', apellido: '', pais: '', avatar: '' });
-        function openProfileForm() { Object.assign(profileDraft, { nombre: profile.nombre || '', apellido: profile.apellido || '', pais: profile.pais || '', avatar: profile.avatar || '' }); confirmDelete.value = false; showProfileForm.value = true; }
-        function closeProfileForm() { showProfileForm.value = false; confirmDelete.value = false; }
+        function openProfileForm() { Object.assign(profileDraft, { nombre: profile.nombre || '', apellido: profile.apellido || '', pais: profile.pais || '', avatar: profile.avatar || '' }); confirmDelete.value = false; deleteConfirmText.value = ''; showProfileForm.value = true; }
+        function closeProfileForm() { showProfileForm.value = false; confirmDelete.value = false; deleteConfirmText.value = ''; }
         function saveProfile() {
             profile.nombre = (profileDraft.nombre || '').trim();
             profile.apellido = (profileDraft.apellido || '').trim();
@@ -1382,6 +1417,7 @@ createApp({
         }
         async function deleteAccount() {
             if (!user.value) return;
+            if (!canDeleteAccount.value) return notify('Escribe “borrar cuenta” para confirmar', 'error');
             deleting.value = true;
             let full = false;
             try { const { error } = await supa.functions.invoke('borrar-cuenta', { body: {} }); if (!error) full = true; } catch (e) { /* función no desplegada */ }
@@ -1390,11 +1426,12 @@ createApp({
                     supa.from('gastos').delete().neq('id', 0),
                     supa.from('deudas').delete().neq('id', 0),
                     supa.from('metas').delete().neq('id', 0),
+                    supa.from('bitacora').delete().eq('user_id', user.value.id),
                     supa.from('user_settings').delete().eq('user_id', user.value.id),
                 ]);
             }
-            ['planCfg', 'planAsign', 'manualRates', 'ratesCache', 'creditProviders', 'profile'].forEach((k) => localStorage.removeItem(k));
-            deudas.value = []; metas.value = []; gastosReales.value = [];
+            ['planCfg', 'planAsign', 'manualRates', 'ratesCache', 'creditProviders', 'profile', 'bitacora'].forEach((k) => localStorage.removeItem(k));
+            deudas.value = []; metas.value = []; gastosReales.value = []; bitacora.value = [];
             await supa.auth.signOut();
             deleting.value = false; showProfileForm.value = false; confirmDelete.value = false;
             notify(full ? 'Cuenta eliminada' : 'Cuenta cerrada y datos borrados', 'ok');
@@ -1450,22 +1487,25 @@ createApp({
         /* ============================================================
            Ajustes → Sistema: chequeo de dependencias (#1, #2, #9)
            ============================================================ */
-        const health = reactive({ checked: false, checking: false, deudasCols: null, metas: null, settings: null, gastos: null });
+        const health = reactive({ checked: false, checking: false, deudasCols: null, metas: null, settings: null, gastos: null, bitacora: null });
         async function runHealth() {
             if (!user.value) return;
             health.checking = true;
             const ok = (error) => !(error && /column|relation|schema cache|does not exist|not find/i.test(error.message || ''));
             const probe = async (q) => { const { error } = await q; return ok(error); };
-            health.deudasCols = await probe(supa.from('deudas').select('recurrente,dia_pago,pagos_realizados,ultimo_pago,abonos,plan,inicial,cuotas').limit(1));
+            health.deudasCols = await probe(supa.from('deudas').select('recurrente,dia_pago,pagos_realizados,ultimo_pago,abonos,plan,inicial,cuotas,pagado_en').limit(1));
             health.metas = await probe(supa.from('metas').select('id').limit(1));
             health.settings = await probe(supa.from('user_settings').select('user_id').limit(1));
             health.gastos = await probe(supa.from('gastos').select('id').limit(1));
+            health.bitacora = await probe(supa.from('bitacora').select('id').limit(1));
             gastosAvailable.value = !!health.gastos;
             settingsAvailable = !!health.settings;
+            bitacoraAvailable = !!health.bitacora;
             health.checked = true; health.checking = false;
             if (health.settings) { await pullSettings(); pushSettings(); }
+            if (health.bitacora) await loadBitacora();
         }
-        const allGreen = computed(() => health.checked && health.deudasCols && health.metas && health.settings && health.gastos && checklist.emailDeployed && checklist.dbPasswordReset);
+        const allGreen = computed(() => health.checked && health.deudasCols && health.metas && health.settings && health.gastos && health.bitacora && checklist.emailDeployed && checklist.dbPasswordReset);
 
         const emailTesting = ref(false);
         async function testEmail() {
@@ -1548,7 +1588,7 @@ createApp({
             showGastoForm.value = false; await loadGastos();
         }
         async function delGasto(g) {
-            if (!confirm('¿Eliminar este gasto?')) return;
+            if (!(await confirmAction({ title: 'Eliminar gasto', msg: `¿Seguro que deseas borrar el gasto “${g.descripcion || catInfo(g.categoria).label}” (${symOf(g.moneda)} ${fmt(g.monto)})? Esta acción no se puede deshacer.` }))) return;
             if (busy.value) return; busy.value = true;
             try {
                 const { error } = await supa.from('gastos').delete().eq('id', g.id);
@@ -1667,10 +1707,11 @@ createApp({
             fmtDateTime, fmtTime,
             bitacora, bitacoraFilter, bitacoraFilters, bitacoraGroups, bitaInfo, limpiarBitacora,
             heatTip, heatEnter, heatLeave,
+            confirmBox, confirmResolve,
             suscripciones, pagarMes, LEAD_DIAS, subIcon, subLabel,
             health, runHealth, allGreen, checklist, profile, displayName, emailTesting, testEmail,
             COUNTRIES, AVATARS, localTime, paisNombre, paisFlag, paisTzLabel,
-            showProfileForm, confirmDelete, deleting, profileDraft, openProfileForm, closeProfileForm, saveProfile, deleteAccount,
+            showProfileForm, confirmDelete, deleting, deleteConfirmText, canDeleteAccount, profileDraft, openProfileForm, closeProfileForm, saveProfile, deleteAccount,
             exportCSV, exportBackup,
             CATEGORIAS, catInfo, gastosReales, gastosAvailable, showGastoForm, savingGasto, gastoForm, openGastoForm, closeGastoForm, saveGasto, delGasto, gastosRealMetrics, gastosRecientes,
             calcTab, calc, convCalc, swapConv, convResult, compraEquivs, deudaSim, creditoSim,

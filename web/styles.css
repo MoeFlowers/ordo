@@ -1256,10 +1256,33 @@ input:disabled { color: var(--muted); background: var(--surface-3); cursor: not-
 .pf-danger-head small { font-size: 12.5px; color: var(--muted); }
 .btn.danger-solid { background: var(--pay); color: #fff; border-color: var(--pay); }
 .btn.danger-solid:hover { filter: brightness(1.05); }
-.pf-confirm { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pf-confirm { display: flex; flex-direction: column; gap: 10px; }
 .pf-confirm-txt { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; color: var(--late); }
-.pf-confirm-txt svg { width: 16px; height: 16px; }
-.pf-confirm-actions { display: flex; gap: 8px; }
+.pf-confirm-txt svg { width: 16px; height: 16px; flex: none; }
+.pf-confirm-txt b { color: var(--text); text-transform: none; }
+.pf-confirm-input { width: 100%; padding: 11px 13px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 14px; }
+.pf-confirm-input:focus { outline: none; border-color: var(--pay); }
+.pf-confirm-input.ok { border-color: var(--collect); }
+.pf-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Diálogo de confirmación (borrados) */
+.confirm-scrim { z-index: 70; }
+.confirm-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 22px; max-width: 400px; width: 100%; box-shadow: var(--shadow); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.confirm-ico { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); color: var(--muted); margin-bottom: 8px; }
+.confirm-ico.danger { background: color-mix(in srgb, var(--pay) 15%, transparent); color: var(--pay); }
+.confirm-ico svg { width: 26px; height: 26px; }
+.confirm-title { font-size: 18px; font-weight: 700; margin: 0; }
+.confirm-msg { font-size: 14px; color: var(--muted); margin: 6px 0 18px; line-height: 1.5; }
+.confirm-actions { display: flex; gap: 10px; width: 100%; }
+.confirm-actions .btn { flex: 1; justify-content: center; }
+@media (max-width: 620px) { .confirm-scrim { align-items: center; padding: 20px; } .confirm-box { border-radius: var(--radius); } }
+
+/* Términos y privacidad */
+.legal-body { display: flex; flex-direction: column; gap: 4px; max-width: 68ch; }
+.legal-body h3 { font-size: 14.5px; font-weight: 700; margin: 16px 0 4px; }
+.legal-body h3:first-child { margin-top: 4px; }
+.legal-body p { font-size: 13.5px; line-height: 1.6; color: var(--muted); margin: 0; }
+.legal-body b { color: var(--text); font-weight: 600; }
 
 /* ================= Calculadora / Simulador ================= */
 .calc-tabs { flex-wrap: wrap; }

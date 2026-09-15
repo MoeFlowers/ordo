@@ -114,4 +114,25 @@ create policy "gastos_insert_own" on public.gastos for insert with check (auth.u
 create policy "gastos_update_own" on public.gastos for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "gastos_delete_own" on public.gastos for delete using (auth.uid() = user_id);
 
+-- ---------- 6) Bitácora (historial de actividad, sincronizado) ----------
+create table if not exists public.bitacora (
+    id          bigint generated always as identity primary key,
+    user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
+    at          timestamptz not null default now(),   -- cuándo ocurrió el evento
+    type        text not null default '',             -- deuda_add | pago | abono | meta_add | gasto_add | ...
+    title       text not null default '',
+    detail      text default '',
+    amount      numeric,
+    moneda      text default '',
+    created_at  timestamptz not null default now()
+);
+create index if not exists bitacora_user_idx on public.bitacora (user_id, at desc);
+alter table public.bitacora enable row level security;
+drop policy if exists "bitacora_select_own" on public.bitacora;
+drop policy if exists "bitacora_insert_own" on public.bitacora;
+drop policy if exists "bitacora_delete_own" on public.bitacora;
+create policy "bitacora_select_own" on public.bitacora for select using (auth.uid() = user_id);
+create policy "bitacora_insert_own" on public.bitacora for insert with check (auth.uid() = user_id);
+create policy "bitacora_delete_own" on public.bitacora for delete using (auth.uid() = user_id);
+
 -- Listo. Vuelve a la app → Ajustes → Sistema y verás todo en verde.

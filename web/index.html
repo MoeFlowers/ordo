@@ -918,8 +918,9 @@
                                         <li><span class="sys-dot" :class="health.metas ? 'ok' : 'bad'"></span><div class="sys-main"><b>Metas de ahorro</b><small>Tabla metas</small></div><span class="sys-tag" :class="health.metas ? 'ok' : 'bad'">{{ health.checked ? (health.metas ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
                                         <li><span class="sys-dot" :class="health.settings ? 'ok' : 'bad'"></span><div class="sys-main"><b>Sincronización entre dispositivos</b><small>Tabla user_settings · plan, tasas y proveedores</small></div><span class="sys-tag" :class="health.settings ? 'ok' : 'bad'">{{ health.checked ? (health.settings ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
                                         <li><span class="sys-dot" :class="health.gastos ? 'ok' : 'bad'"></span><div class="sys-main"><b>Gastos reales</b><small>Tabla gastos</small></div><span class="sys-tag" :class="health.gastos ? 'ok' : 'bad'">{{ health.checked ? (health.gastos ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
+                                        <li><span class="sys-dot" :class="health.bitacora ? 'ok' : 'bad'"></span><div class="sys-main"><b>Bitácora sincronizada</b><small>Tabla bitacora · historial entre dispositivos</small></div><span class="sys-tag" :class="health.bitacora ? 'ok' : 'bad'">{{ health.checked ? (health.bitacora ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
                                     </ul>
-                                    <p v-if="health.checked && !(health.deudasCols && health.metas && health.settings && health.gastos)" class="sys-fix">
+                                    <p v-if="health.checked && !(health.deudasCols && health.metas && health.settings && health.gastos && health.bitacora)" class="sys-fix">
                                         <icon name="alert"></icon> Abre <b>Supabase → SQL Editor</b>, pega el archivo <b>supabase/setup.sql</b> del proyecto y pulsa <b>Run</b>. Luego “Rechequear”.
                                     </p>
                                 </div>
@@ -968,6 +969,39 @@
                                     <p class="hint"><icon name="alert"></icon> Para borrar tu cuenta, entra a <b>“Editar perfil”</b>: eliminarla borra en cascada todas tus deudas y metas.</p>
                                 </div>
                             </div>
+
+                            <!-- Términos y privacidad -->
+                            <div class="set-panel" v-show="isSetTab('legal')">
+                                <div class="card legal">
+                                    <div class="card-head"><h2>Términos y privacidad</h2><span class="card-sub">Última actualización: 15 de septiembre de 2026</span></div>
+                                    <div class="legal-body">
+                                        <h3>1. Qué es Ordo</h3>
+                                        <p>Ordo es una herramienta personal para llevar el orden de tus finanzas: registrar deudas por pagar y por cobrar, gastos, metas de ahorro y planificar tus pagos. Es una ayuda de organización, <b>no</b> una entidad financiera.</p>
+
+                                        <h3>2. No es asesoría financiera</h3>
+                                        <p>La información, cálculos, simulaciones y tasas de cambio que muestra la app son solo referenciales y pueden contener errores o estar desactualizados. No constituyen asesoría financiera, contable ni legal. Las decisiones sobre tu dinero son tuyas; verifica siempre con las fuentes oficiales.</p>
+
+                                        <h3>3. Tu cuenta</h3>
+                                        <p>Eres responsable de la veracidad de los datos que registras y de mantener segura tu contraseña. Debes ser mayor de edad en tu país para usar la app. Un uso indebido o fraudulento puede llevar a la suspensión del acceso.</p>
+
+                                        <h3>4. Tus datos y privacidad</h3>
+                                        <p>Tus datos (deudas, gastos, metas, perfil e historial) se guardan en tu cuenta dentro de <b>Supabase</b> (nuestro proveedor de base de datos y autenticación) y, para tu comodidad, una copia local en tu dispositivo. Solo tú puedes ver tus datos: el acceso está protegido por seguridad a nivel de fila (RLS) ligada a tu usuario.</p>
+                                        <p>No vendemos ni compartimos tu información personal con terceros con fines publicitarios. Usamos tu correo únicamente para iniciar sesión, recuperar tu contraseña y —si lo activas— enviarte recordatorios de pago. Para calcular conversiones consultamos APIs públicas de tasas de cambio; no les enviamos tus datos personales.</p>
+
+                                        <h3>5. Eliminación de tu cuenta y datos</h3>
+                                        <p>Puedes borrar tu cuenta cuando quieras desde <b>Ajustes → Cuenta → Editar perfil → Borrar cuenta</b>. Por seguridad, deberás escribir la frase <b>“borrar cuenta”</b> para confirmar. Al hacerlo se eliminan de forma permanente tu acceso y todos tus datos asociados (deudas, gastos, metas, historial y ajustes). Esta acción no se puede deshacer.</p>
+
+                                        <h3>6. Disponibilidad y responsabilidad</h3>
+                                        <p>La app se ofrece “tal cual”, sin garantía de disponibilidad continua ni de ausencia de errores. En la máxima medida permitida por la ley, no nos hacemos responsables por pérdidas derivadas del uso, de datos ingresados incorrectamente, de fallas de terceros (proveedores de base de datos, APIs de tasas) o de interrupciones del servicio. Guardar respaldos periódicos (Ajustes → Respaldo) es tu responsabilidad.</p>
+
+                                        <h3>7. Cambios</h3>
+                                        <p>Podemos actualizar estos términos para reflejar mejoras o requisitos legales. Publicaremos la nueva versión aquí con su fecha. El uso continuado de la app implica la aceptación de los cambios.</p>
+
+                                        <h3>8. Contacto</h3>
+                                        <p>¿Dudas o solicitudes sobre tus datos? Escríbenos a <b>moeflowers2@gmail.com</b>.</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </transition>
                 </div>
@@ -999,7 +1033,10 @@
                             </li>
                         </ul>
                     </div>
-                    <p class="bita-note"><icon name="alert"></icon> La bitácora se guarda en <b>este dispositivo</b> y registra tu actividad desde ahora. Se conservan los últimos 400 movimientos.</p>
+                    <p class="bita-note"><icon name="alert"></icon>
+                        <span v-if="health.bitacora">Historial <b>sincronizado entre tus dispositivos</b>. Se conservan los últimos 400 movimientos.</span>
+                        <span v-else>Historial guardado en <b>este dispositivo</b>. Para sincronizarlo entre equipos, corre <b>supabase/setup.sql</b> (Ajustes → Sistema).</span>
+                    </p>
                 </div>
                 <div v-else class="card empty big">
                     <icon name="book"></icon>
@@ -1294,15 +1331,31 @@
                         <div class="pf-danger-head"><b>¿Borrar tu cuenta?</b><small>Elimina tu acceso y todos tus datos (deudas, metas, gastos). No se puede deshacer.</small></div>
                         <button v-if="!confirmDelete" type="button" class="btn danger-ghost" @click="confirmDelete = true"><icon name="trash"></icon> Borrar cuenta</button>
                         <div v-else class="pf-confirm">
-                            <span class="pf-confirm-txt"><icon name="alert"></icon> Esto es permanente. ¿Seguro?</span>
+                            <span class="pf-confirm-txt"><icon name="alert"></icon> Esto es permanente. Para confirmar, escribe <b>borrar cuenta</b> abajo.</span>
+                            <input type="text" class="pf-confirm-input" v-model="deleteConfirmText" placeholder="borrar cuenta" autocomplete="off" autocapitalize="none" spellcheck="false" :class="{ ok: canDeleteAccount }">
                             <div class="pf-confirm-actions">
-                                <button type="button" class="btn" @click="confirmDelete = false">Cancelar</button>
-                                <button type="button" class="btn danger-solid" :disabled="deleting" @click="deleteAccount">{{ deleting ? 'Borrando…' : 'Sí, borrar todo' }}</button>
+                                <button type="button" class="btn" @click="confirmDelete = false; deleteConfirmText = ''">Cancelar</button>
+                                <button type="button" class="btn danger-solid" :disabled="deleting || !canDeleteAccount" @click="deleteAccount">{{ deleting ? 'Borrando…' : 'Sí, borrar todo' }}</button>
                             </div>
                         </div>
                     </div>
 
                     <div class="modal-foot"><button type="button" class="btn" @click="closeProfileForm">Cerrar</button><button type="button" class="btn primary" @click="saveProfile">Guardar cambios</button></div>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- Diálogo de confirmación (borrados) -->
+    <transition name="fade">
+        <div v-if="confirmBox.show" class="modal-scrim confirm-scrim" @click.self="confirmResolve(false)">
+            <div class="confirm-box">
+                <div class="confirm-ico" :class="{ danger: confirmBox.danger }"><icon name="alert"></icon></div>
+                <h2 class="confirm-title">{{ confirmBox.title }}</h2>
+                <p class="confirm-msg">{{ confirmBox.msg }}</p>
+                <div class="confirm-actions">
+                    <button type="button" class="btn" @click="confirmResolve(false)">Cancelar</button>
+                    <button type="button" class="btn" :class="confirmBox.danger ? 'danger-solid' : 'primary'" @click="confirmResolve(true)">{{ confirmBox.ok }}</button>
                 </div>
             </div>
         </div>
