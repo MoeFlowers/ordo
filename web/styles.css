@@ -3,20 +3,20 @@
    Firma: color por moneda + cifras monoespaciadas (libro contable)
    ========================================================= */
 :root {
-    /* ===== Tema oscuro premium (near-black) ===== */
-    --bg:        #0B0B0D;
-    --surface:   #161619;
-    --surface-2: #1D1D21;
-    --surface-3: #26262B;
-    --border:    #2A2A30;
-    --border-soft:#212127;
-    --text:      #F5F5F7;
-    --muted:     #9A9AA2;
-    --muted-2:   #63636A;
+    /* ===== Tema oscuro (UI/UX Pro Max: neutros fríos, sistemático) ===== */
+    --bg:        #0C0E14;
+    --surface:   #141826;
+    --surface-2: #1A1F30;
+    --surface-3: #232A40;
+    --border:    #2B3348;
+    --border-soft:#222A3D;
+    --text:      #EEF1F8;
+    --muted:     #98A4C0;
+    --muted-2:   #5C6885;
 
-    /* Acento calmado (indigo) */
-    --accent:    #7E7BFF;
-    --accent-dim:#6462E0;
+    /* Acento (azul profesional) */
+    --accent:    #4F7CFF;
+    --accent-dim:#3B63E6;
 
     /* Color por moneda — suave, no estridente */
     --usd:  #45BE86;
@@ -29,34 +29,34 @@
     --warn:    #E0A24E;
     --late:    #F26D77;
 
-    --sidebar-bg: #0E0E11;
-    --topbar-bg:  rgba(11, 11, 13, .72);
+    --sidebar-bg: #0A0C12;
+    --topbar-bg:  rgba(12, 14, 20, .72);
     --scrim:      rgba(0, 0, 0, .55);
 
-    --radius: 16px;
-    --radius-sm: 11px;
-    --shadow: 0 14px 44px -20px rgba(0,0,0,.65);
+    --radius: 18px;
+    --radius-sm: 12px;
+    --shadow: 0 18px 48px -24px rgba(0,0,0,.72);
     --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
 
-    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
 }
 
 /* ===== Tema claro premium (según el sistema) ===== */
 @media (prefers-color-scheme: light) {
     :root {
-        --bg:        #F5F5F7;
+        --bg:        #F4F6FB;
         --surface:   #FFFFFF;
-        --surface-2: #F4F4F7;
-        --surface-3: #ECECEF;
-        --border:    #E4E4E9;
-        --border-soft:#EDEDF1;
-        --text:      #1D1D1F;
-        --muted:     #6E6E73;
-        --muted-2:   #A1A1A8;
+        --surface-2: #F1F3FA;
+        --surface-3: #E8ECF5;
+        --border:    #E1E6F0;
+        --border-soft:#ECEFF6;
+        --text:      #131722;
+        --muted:     #5E6880;
+        --muted-2:   #9AA2B5;
 
-        --accent:    #5E5CE6;
-        --accent-dim:#4B49C8;
+        --accent:    #3B63E6;
+        --accent-dim:#2F51C8;
 
         --usd:  #1F9D68;
         --bs:   #B77E2A;
@@ -280,7 +280,7 @@ body {
 .type-dot.por_pagar { background: var(--pay); }
 .type-dot.por_cobrar { background: var(--collect); }
 .due-tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 20px; background: var(--surface-2); color: var(--muted); margin-left: 2px; }
-.badge-rec { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--accent); background: rgba(124,147,255,.12); padding: 2px 9px; border-radius: 20px; width: fit-content; margin-top: 3px; }
+.badge-rec { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--accent); background: rgba(79,124,255,.12); padding: 2px 9px; border-radius: 20px; width: fit-content; margin-top: 3px; }
 .badge-rec svg { width: 12px; height: 12px; }
 
 .pill { font-size: 12px; font-weight: 600; padding: 3px 11px; border-radius: 20px; text-transform: capitalize; }
@@ -481,7 +481,7 @@ body {
 .meta-type { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
 .meta-type svg { width: 13px; height: 13px; }
 .meta-type.flexible { background: rgba(38,198,192,.14); color: var(--usdt); }
-.meta-type.fija { background: rgba(124,147,255,.14); color: var(--accent); }
+.meta-type.fija { background: rgba(79,124,255,.14); color: var(--accent); }
 .meta-type.simple { background: rgba(91,209,160,.14); color: var(--collect); }
 .meta-hist { border-top: 1px solid var(--border-soft); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .mh-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-2); }
@@ -516,7 +516,7 @@ body {
 .sub-icon.pagada { background: rgba(91,209,160,.15); color: var(--collect); }
 .sub-icon.urgente { background: rgba(255,107,129,.15); color: var(--pay); }
 .sub-icon.proxima { background: rgba(230,169,78,.15); color: var(--warn); }
-.sub-icon.programada { background: rgba(124,147,255,.15); color: var(--accent); }
+.sub-icon.programada { background: rgba(79,124,255,.15); color: var(--accent); }
 .sub-id h3 { margin: 0 0 3px; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sub-id small { color: var(--muted-2); font-size: 12px; }
 .sub-monto { font-size: 18px; font-weight: 800; white-space: nowrap; text-align: right; }
@@ -529,7 +529,7 @@ body {
 .sub-statusbar.pagada { background: rgba(91,209,160,.14); color: var(--collect); }
 .sub-statusbar.urgente { background: rgba(255,107,129,.15); color: var(--pay); }
 .sub-statusbar.proxima { background: rgba(230,169,78,.15); color: var(--warn); }
-.sub-statusbar.programada { background: rgba(124,147,255,.12); color: var(--accent); }
+.sub-statusbar.programada { background: rgba(79,124,255,.12); color: var(--accent); }
 
 .sub-pagos { font-size: 11px; color: var(--muted-2); white-space: nowrap; }
 .sub-actions { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
@@ -597,7 +597,7 @@ body {
 .df-input { display: flex; align-items: center; gap: 9px; width: 100%; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 16px; font-family: inherit; cursor: pointer; text-align: left; }
 .df-input svg { width: 18px; height: 18px; color: var(--muted); flex-shrink: 0; }
 .df-input .ph { color: var(--muted-2); }
-.datefield.open .df-input { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,147,255,.15); }
+.datefield.open .df-input { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,124,255,.15); }
 .df-pop { position: fixed; z-index: 90; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 300px; max-width: calc(100vw - 24px); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 14px; }
 .df-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .df-title { font-weight: 700; text-transform: capitalize; font-size: 14px; }
@@ -729,7 +729,7 @@ input, select, textarea {
     transition: border-color .15s, box-shadow .15s;
 }
 textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
-input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,147,255,.15); }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,124,255,.15); }
 input:disabled { color: var(--muted); background: var(--surface-3); cursor: not-allowed; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
