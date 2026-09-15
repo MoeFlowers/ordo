@@ -367,11 +367,13 @@
                             <div class="ps-chip ok"><span class="ps-lbl">Asignado</span><span class="mono ps-val">{{ symOf(board.cur) }} {{ fmt(board.totalAsignado) }}</span></div>
                             <div class="ps-chip" :class="board.sinAsignar ? 'warn' : 'ok'"><span class="ps-lbl">Sin asignar</span><span class="mono ps-val">{{ board.sinAsignar }}</span></div>
                         </div>
-                        <div class="board-actions">
+                        <div class="board-actions plan-desktop-only">
                             <button class="btn" @click="autoAsignar"><icon name="zap"></icon> Auto-asignar</button>
                             <button class="btn" @click="limpiarAsign"><icon name="close"></icon> Limpiar</button>
                         </div>
                     </div>
+                    <!-- ESCRITORIO: tablero de arrastrar y soltar -->
+                    <div class="plan-desktop">
                     <p class="hint board-hint">Arrastra una deuda al cobro donde la vas a pagar · tócala para ver el detalle y editarla. La barra muestra cuánto de tu disponible usas (roja = te pasas); “tarde” = la pusiste después de su vencimiento.</p>
                     <div class="board">
                         <div class="board-col backlog">
@@ -408,6 +410,77 @@
                             </div>
                         </div>
                     </div>
+                    </div><!-- /plan-desktop -->
+
+                    <!-- MÓVIL: flujo táctil (auto-plan + tocar para mover) -->
+                    <div class="plan-mobile">
+                        <button class="mplan-auto" :class="{ done: board.totalAsignado > 0.001 }" @click="autoAsignar">
+                            <icon name="zap"></icon>
+                            <span>{{ board.totalAsignado > 0.001 ? 'Volver a planificar' : 'Auto-planificar mis pagos' }}</span>
+                        </button>
+                        <p class="hint mplan-hint">Toca una deuda para elegir en qué cobro la pagas. El anillo muestra cuánto de tu disponible ya está comprometido.</p>
+
+                        <div class="mplan-carousel">
+                            <div v-for="col in board.columns" :key="col.key" class="mplan-pay" :class="{ over: col.over }">
+                                <div class="mplan-top">
+                                    <div><div class="mplan-date">{{ col.label }}</div><div class="mplan-sub">Cobras {{ symOf(board.cur) }} {{ fmt(col.cap) }}</div></div>
+                                    <div class="mplan-ring" :class="{ warn: col.over }">
+                                        <svg viewBox="0 0 52 52"><circle class="mr-track" cx="26" cy="26" r="23"></circle><circle class="mr-prog" cx="26" cy="26" r="23" :stroke-dasharray="planRing(col).dash"></circle></svg>
+                                        <span class="mplan-pct mono">{{ planRing(col).pct }}%</span>
+                                    </div>
+                                </div>
+                                <div class="mplan-cap">
+                                    <span>Comprometido <b class="mono">{{ symOf(board.cur) }} {{ fmt(col.used) }}</b></span>
+                                    <span v-if="col.over" class="txt-late mono">te pasas {{ symOf(board.cur) }} {{ fmt(-col.remaining) }}</span>
+                                    <span v-else class="txt-muted mono">quedan {{ symOf(board.cur) }} {{ fmt(col.remaining) }}</span>
+                                </div>
+                                <div class="mplan-items">
+                                    <button v-for="d in col.cards" :key="d.id" class="mplan-item" :class="{ late: d.late, 'is-cashea': d.cashea }" :style="d.cashea && d.provColor && !d.late ? { borderLeftColor: d.provColor } : {}" @click="openPlanSheet(d, col.key)">
+                                        <span class="dc-dot" :style="{ background: curColor(d.moneda) }"></span>
+                                        <span class="mplan-nm"><b>{{ d.descripcion }}</b><small v-if="d.late" class="txt-late">tarde · vence {{ d.fecha_vencimiento || '—' }}</small></span>
+                                        <span class="mplan-amt mono">{{ symOf(board.cur) }} {{ fmt(d.saldoConv) }}</span>
+                                    </button>
+                                    <p v-if="!col.cards.length" class="mplan-empty">Sin pagos aquí</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mplan-pending">
+                            <div class="mplan-ph">
+                                <h4>Por asignar</h4>
+                                <span class="mplan-cnt" :class="{ zero: !board.sinAsignar }">{{ board.sinAsignar }}</span>
+                            </div>
+                            <div v-if="board.backlog.length" class="mplan-chips">
+                                <button v-for="d in board.backlog" :key="d.id" class="mplan-chip" @click="openPlanSheet(d, null)">
+                                    <span class="dc-dot" :style="{ background: curColor(d.moneda) }"></span>
+                                    <span class="mplan-cnm">{{ d.descripcion }}</span>
+                                    <span class="mplan-camt mono">{{ symOf(board.cur) }} {{ fmt(d.saldoConv) }}</span>
+                                </button>
+                            </div>
+                            <div v-else class="mplan-allset"><icon name="check"></icon> ¡Todo planificado!</div>
+                        </div>
+                    </div><!-- /plan-mobile -->
+
+                    <!-- Hoja emergente móvil: mover una deuda -->
+                    <transition name="sheet">
+                        <div v-if="planSheet.open" class="mplan-sheet-scrim" @click="closePlanSheet"></div>
+                    </transition>
+                    <transition name="sheet-up">
+                        <div v-if="planSheet.open && planSheet.item" class="mplan-sheet">
+                            <div class="msh-grab"></div>
+                            <div class="msh-title">Mover “{{ planSheet.item.descripcion }}”</div>
+                            <div class="msh-sub">{{ symOf(board.cur) }} {{ fmt(planSheet.item.saldoConv) }} · ¿en qué cobro la pagas?</div>
+                            <template v-for="col in board.columns" :key="col.key">
+                                <button v-if="col.key !== planSheet.fromKey" class="msh-opt" @click="planMove(col.key)">
+                                    <span class="msh-date">{{ col.label }}</span>
+                                    <span class="msh-info">quedan {{ symOf(board.cur) }} {{ fmt(col.remaining) }}</span>
+                                    <span class="msh-fit" :class="(col.used + planSheet.item.saldoConv > col.cap + 0.001) ? 'tight' : 'ok'">{{ (col.used + planSheet.item.saldoConv > col.cap + 0.001) ? 'ajustado' : 'cabe' }}</span>
+                                </button>
+                            </template>
+                            <button class="msh-opt view" @click="verDeuda(planSheet.item); closePlanSheet()"><icon name="eye"></icon> Ver detalle y editar</button>
+                            <button v-if="planSheet.fromKey" class="msh-opt remove" @click="planMove('backlog')">Devolver a “Por asignar”</button>
+                        </div>
+                    </transition>
                 </template>
                 <div v-else class="card empty big">
                     <icon name="wallet"></icon>

@@ -883,6 +883,27 @@ createApp({
         }
         function limpiarAsign() { Object.keys(asign).forEach((k) => delete asign[k]); notify('Tablero vaciado'); }
 
+        /* ---------- Flujo táctil móvil: tocar para mover (sin arrastrar) ---------- */
+        const planSheet = reactive({ open: false, item: null, fromKey: null });
+        function openPlanSheet(d, fromKey) { planSheet.item = d; planSheet.fromKey = fromKey || null; planSheet.open = true; }
+        function closePlanSheet() { planSheet.open = false; }
+        function planMove(key) {
+            if (!planSheet.item) return;
+            const id = planSheet.item.id;
+            moverDeuda(id, key);
+            if (key && key !== 'backlog') {
+                const col = board.value.columns.find((c) => c.key === key);
+                notify('Movido a ' + (col ? col.label : 'ese cobro'), 'ok');
+            } else notify('Devuelto a “Por asignar”');
+            closePlanSheet();
+        }
+        // Anillo de capacidad (r=23): devuelve el stroke-dasharray y el % redondeado
+        function planRing(col) {
+            const C = 2 * Math.PI * 23;
+            const frac = Math.min(1, Math.max(0, (col.pct || 0) / 100));
+            return { dash: (frac * C).toFixed(1) + ' ' + C.toFixed(1), pct: Math.round(col.pct || 0) };
+        }
+
         /* ---------- Suscripciones / mensualidades ---------- */
         const suscripciones = computed(() => {
             const list = deudas.value.filter((d) => d.recurrente && d.tipo === 'por_pagar' && d.estado !== 'pagada');
@@ -1449,6 +1470,7 @@ createApp({
             stats, mesLabel,
             heatYear, gastos, metas, showMetaForm, savingMeta, metaForm, openMetaForm, closeMetaForm, saveMeta, aportarMeta, quitarAporte, delMeta, proyeccion,
             board, onDrop, autoAsignar, limpiarAsign, verDeuda,
+            planSheet, openPlanSheet, closePlanSheet, planMove, planRing,
             suscripciones, pagarMes, LEAD_DIAS, subIcon, subLabel,
             health, runHealth, allGreen, checklist, profile, displayName, emailTesting, testEmail,
             COUNTRIES, AVATARS, localTime, paisNombre, paisFlag, paisTzLabel,
