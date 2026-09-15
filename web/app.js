@@ -1158,7 +1158,8 @@ createApp({
            nube; localStorage queda como caché/fallback offline.
            ============================================================ */
         const checklist = reactive({ emailDeployed: false, dbPasswordReset: false });
-        const profile = reactive({ nombre: '', apellido: '', pais: '', avatar: '' });
+        const savedProfile = JSON.parse(localStorage.getItem('profile') || 'null');
+        const profile = reactive(Object.assign({ nombre: '', apellido: '', pais: '', avatar: '' }, savedProfile && typeof savedProfile === 'object' ? savedProfile : {}));
         const displayName = computed(() => {
             const n = ((profile.nombre || '') + ' ' + (profile.apellido || '')).trim();
             return n || (user.value && user.value.email) || '';
@@ -1234,7 +1235,7 @@ createApp({
                     supa.from('user_settings').delete().eq('user_id', user.value.id),
                 ]);
             }
-            ['planCfg', 'planAsign', 'manualRates', 'ratesCache', 'creditProviders'].forEach((k) => localStorage.removeItem(k));
+            ['planCfg', 'planAsign', 'manualRates', 'ratesCache', 'creditProviders', 'profile'].forEach((k) => localStorage.removeItem(k));
             deudas.value = []; metas.value = []; gastosReales.value = [];
             await supa.auth.signOut();
             deleting.value = false; showProfileForm.value = false; confirmDelete.value = false;
@@ -1266,7 +1267,12 @@ createApp({
                 if (Array.isArray(s.creditProviders) && s.creditProviders.length) credProviders.value = s.creditProviders;
                 if (s.manualRates) localStorage.setItem('manualRates', JSON.stringify(s.manualRates));
                 if (s.checklist) Object.assign(checklist, s.checklist);
-                if (s.profile) Object.assign(profile, s.profile);
+                if (s.profile && typeof s.profile === 'object') {
+                    // La nube gana si trae datos; si viene vacía, conservamos el perfil local (y luego se sube).
+                    const hasRemote = Object.values(s.profile).some((v) => v);
+                    const hasLocal = Object.values(profile).some((v) => v);
+                    if (hasRemote || !hasLocal) Object.assign(profile, s.profile);
+                }
                 await Vue.nextTick(); applyingSettings = false;
             }
         }
@@ -1280,7 +1286,8 @@ createApp({
             }, 800);
         }
         watch(checklist, pushSettings, { deep: true });
-        watch(profile, pushSettings, { deep: true });
+        // Perfil: guarda SIEMPRE en el dispositivo (sobrevive recargas sin BD) y además sincroniza a la nube.
+        watch(profile, () => { try { localStorage.setItem('profile', JSON.stringify({ ...profile })); } catch (e) {} pushSettings(); }, { deep: true });
 
         /* ============================================================
            Ajustes → Sistema: chequeo de dependencias (#1, #2, #9)
