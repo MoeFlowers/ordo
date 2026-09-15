@@ -212,7 +212,7 @@
                     <article class="card">
                         <div class="card-head"><h2>Próximos vencimientos</h2><span class="card-sub">Lo que debes pagar primero</span></div>
                         <ul class="due-list" v-if="proximos.length">
-                            <li v-for="d in proximos" :key="d.id" class="due-item" @click="go('deudas')">
+                            <li v-for="d in proximos" :key="d.id" class="due-item" @click="verDeuda(d, 'dashboard')" title="Ver detalle">
                                 <span class="due-dot" :class="d.dr < 0 ? 'is-late' : d.dr <= 3 ? 'is-soon' : ''"></span>
                                 <span class="due-main"><b>{{ d.descripcion }}</b><small>{{ d.contraparte || 'Sin contraparte' }}</small></span>
                                 <span class="due-right">
@@ -499,7 +499,7 @@
             </section>
 
             <!-- ESTADÍSTICAS -->
-            <section v-show="currentView === 'stats'" class="view">
+            <section v-show="currentView === 'stats'" class="view stats">
                 <template v-if="stats.status === 'ok'">
                     <!-- Diagnóstico + score -->
                     <div class="card diag" :class="stats.verdictType">

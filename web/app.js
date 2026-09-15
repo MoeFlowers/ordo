@@ -209,6 +209,8 @@ createApp({
         const sidebarOpen = ref(false);
         const showForm = ref(false);
         const saving = ref(false);
+        const busy = ref(false);        // candado global contra doble envío en acciones sueltas
+        const detailFrom = ref('');     // desde dónde se abrió el detalle ('dashboard' → editar lleva a Deudas)
         const toast = reactive({ show: false, msg: '', type: '' });
 
         const monedas = ['USD', 'BS', 'USDT', 'EUR'];
@@ -459,6 +461,7 @@ createApp({
         }
 
         async function save() {
+            if (saving.value) return;                 // evita doble envío al pulsar rápido
             if (!validateDebt()) return notify('Revisa los campos marcados', 'error');
             saving.value = true;
             const esCashea = esFinanciado(form);
@@ -503,18 +506,21 @@ createApp({
         }
         // Registra la cuota del mes en una deuda mensual y la mueve al mes siguiente
         async function pagarMes(d) {
-            const next = advanceMonth(d.fecha_vencimiento, d.dia_pago);
-            const full = {
-                fecha_vencimiento: next, monto_abonado: 0,
-                pagos_realizados: (d.pagos_realizados || 0) + 1, notified_date: '',
-                ultimo_pago: isoDate(todayMidnight()),
-            };
-            let { error } = await supa.from('deudas').update(full).eq('id', d.id);
-            if (error && /pagos_realizados|ultimo_pago|column|schema cache/i.test(error.message || '')) {
-                ({ error } = await supa.from('deudas').update({ fecha_vencimiento: next, monto_abonado: 0, notified_date: '' }).eq('id', d.id));
-            }
-            if (error) return notify('Error: ' + error.message, 'error');
-            notify('Cuota pagada ✓ Próximo cobro: ' + next, 'ok'); await loadDeudas();
+            if (busy.value) return; busy.value = true;
+            try {
+                const next = advanceMonth(d.fecha_vencimiento, d.dia_pago);
+                const full = {
+                    fecha_vencimiento: next, monto_abonado: 0,
+                    pagos_realizados: (d.pagos_realizados || 0) + 1, notified_date: '',
+                    ultimo_pago: isoDate(todayMidnight()),
+                };
+                let { error } = await supa.from('deudas').update(full).eq('id', d.id);
+                if (error && /pagos_realizados|ultimo_pago|column|schema cache/i.test(error.message || '')) {
+                    ({ error } = await supa.from('deudas').update({ fecha_vencimiento: next, monto_abonado: 0, notified_date: '' }).eq('id', d.id));
+                }
+                if (error) return notify('Error: ' + error.message, 'error');
+                notify('Cuota pagada ✓ Próximo cobro: ' + next, 'ok'); await loadDeudas();
+            } finally { busy.value = false; }
         }
         async function abonar(d) {
             const v = prompt('Monto a abonar (saldo: ' + fmt(saldo(d)) + ' ' + symOf(d.moneda) + '):');
@@ -524,15 +530,18 @@ createApp({
             const nuevo = Math.min(d.monto, (Number(d.monto_abonado) || 0) + monto);
             // Si es mensual y con este abono se completa la cuota, avanza al mes siguiente
             if (d.recurrente && nuevo >= d.monto - 0.0001) return pagarMes(d);
-            const estado = (!d.recurrente && nuevo >= d.monto - 0.0001) ? 'pagada' : 'pendiente';
-            const abonos = Array.isArray(d.abonos) ? d.abonos.slice() : [];
-            abonos.push({ f: isoDate(todayMidnight()), m: monto });
-            let { error } = await supa.from('deudas').update({ monto_abonado: nuevo, estado, abonos }).eq('id', d.id);
-            if (error && /abonos|column|schema cache/i.test(error.message || '')) {
-                ({ error } = await supa.from('deudas').update({ monto_abonado: nuevo, estado }).eq('id', d.id));
-            }
-            if (error) return notify('Error: ' + error.message, 'error');
-            notify('Abono registrado ✓', 'ok'); await loadDeudas();
+            if (busy.value) return; busy.value = true;
+            try {
+                const estado = (!d.recurrente && nuevo >= d.monto - 0.0001) ? 'pagada' : 'pendiente';
+                const abonos = Array.isArray(d.abonos) ? d.abonos.slice() : [];
+                abonos.push({ f: isoDate(todayMidnight()), m: monto });
+                let { error } = await supa.from('deudas').update({ monto_abonado: nuevo, estado, abonos }).eq('id', d.id);
+                if (error && /abonos|column|schema cache/i.test(error.message || '')) {
+                    ({ error } = await supa.from('deudas').update({ monto_abonado: nuevo, estado }).eq('id', d.id));
+                }
+                if (error) return notify('Error: ' + error.message, 'error');
+                notify('Abono registrado ✓', 'ok'); await loadDeudas();
+            } finally { busy.value = false; }
         }
         // Gestión de abonos dentro del modal (se guarda al pulsar "Guardar cambios")
         function addAbonoForm() {
@@ -576,16 +585,22 @@ createApp({
         async function toggleEstado(d) {
             // En deudas mensuales, el check significa "pagué la cuota de este mes" → avanza
             if (d.recurrente && d.estado !== 'pagada') return pagarMes(d);
-            const upd = d.estado === 'pagada' ? { estado: 'pendiente' } : { estado: 'pagada', monto_abonado: d.monto };
-            const { error } = await supa.from('deudas').update(upd).eq('id', d.id);
-            if (error) return notify('Error: ' + error.message, 'error');
-            await loadDeudas();
+            if (busy.value) return; busy.value = true;
+            try {
+                const upd = d.estado === 'pagada' ? { estado: 'pendiente' } : { estado: 'pagada', monto_abonado: d.monto };
+                const { error } = await supa.from('deudas').update(upd).eq('id', d.id);
+                if (error) return notify('Error: ' + error.message, 'error');
+                await loadDeudas();
+            } finally { busy.value = false; }
         }
         async function del(d) {
             if (!confirm('¿Eliminar "' + d.descripcion + '"?')) return;
-            const { error } = await supa.from('deudas').delete().eq('id', d.id);
-            if (error) return notify('Error: ' + error.message, 'error');
-            notify('Deuda eliminada'); await loadDeudas();
+            if (busy.value) return; busy.value = true;
+            try {
+                const { error } = await supa.from('deudas').delete().eq('id', d.id);
+                if (error) return notify('Error: ' + error.message, 'error');
+                notify('Deuda eliminada'); await loadDeudas();
+            } finally { busy.value = false; }
         }
 
         /* ---------- Tasas (directo a la API, con caché) ---------- */
@@ -659,8 +674,9 @@ createApp({
 
         /* ---------- Formulario / navegación ---------- */
         function openForm(d, mode = 'edit') { clearErr(formErrors); Object.assign(form, d ? { ...d } : blankForm()); if (esFinanciado(form)) form.plan = credLabel(form.plan); formMode.value = d ? mode : 'edit'; provAdding.value = false; showForm.value = true; }
-        function closeForm() { showForm.value = false; }
-        function editForm() { formMode.value = 'edit'; }
+        function closeForm() { showForm.value = false; detailFrom.value = ''; }
+        // Si el detalle se abrió desde el Dashboard, "Editar" lleva a la vista Deudas y edita ahí.
+        function editForm() { if (detailFrom.value === 'dashboard') { go('deudas'); detailFrom.value = ''; } formMode.value = 'edit'; }
         function go(view) { currentView.value = view; sidebarOpen.value = false; location.hash = view; if (view === 'ajustes') settingsTab.value = ''; }
 
         /* ---------- Entrada escalonada de tarjetas (Motion One) ---------- */
@@ -866,11 +882,11 @@ createApp({
             if (!key || key === 'backlog') delete asign[id];
             else asign[id] = key;
         }
-        // Tocar una tarjeta del tablero → abrir el detalle/edición de la deuda completa
-        function verDeuda(d) {
+        // Tocar una tarjeta del tablero o del dashboard → abrir el detalle (solo ver)
+        function verDeuda(d, from = '') {
             const realId = String(d.id).split('#')[0];
             const full = deudas.value.find((x) => String(x.id) === realId);
-            if (full) openForm(full, 'view');
+            if (full) { detailFrom.value = from; openForm(full, 'view'); }
         }
         function onDrop(evt) {
             const id = evt.item && evt.item.dataset ? evt.item.dataset.id : null;
@@ -1089,6 +1105,7 @@ createApp({
         function openMetaForm(m) { clearErr(metaErrors); Object.assign(metaForm, m ? { ...m } : blankMeta()); showMetaForm.value = true; }
         function closeMetaForm() { showMetaForm.value = false; }
         async function saveMeta() {
+            if (savingMeta.value) return;             // evita doble envío
             if (!validateMeta()) return notify('Revisa los campos marcados', 'error');
             savingMeta.value = true;
             const p = {
@@ -1109,28 +1126,37 @@ createApp({
             const v = prompt('¿Cuánto agregas a "' + m.nombre + '"? (' + symOf(m.moneda) + ')');
             if (v === null) return;
             const monto = parseFloat(v); if (!(monto > 0)) return notify('Monto inválido', 'error');
-            const movs = Array.isArray(m.movimientos) ? m.movimientos.slice() : [];
-            movs.push({ f: isoDate(todayMidnight()), m: monto });
-            const { error } = await supa.from('metas').update({ ahorrado: Number(m.ahorrado) + monto, movimientos: movs }).eq('id', m.id);
-            if (error) return notify('Error: ' + error.message, 'error');
-            notify('Aporte registrado ✓', 'ok'); await loadMetas();
+            if (busy.value) return; busy.value = true;
+            try {
+                const movs = Array.isArray(m.movimientos) ? m.movimientos.slice() : [];
+                movs.push({ f: isoDate(todayMidnight()), m: monto });
+                const { error } = await supa.from('metas').update({ ahorrado: Number(m.ahorrado) + monto, movimientos: movs }).eq('id', m.id);
+                if (error) return notify('Error: ' + error.message, 'error');
+                notify('Aporte registrado ✓', 'ok'); await loadMetas();
+            } finally { busy.value = false; }
         }
         async function quitarAporte(m) {
             const v = prompt('¿Cuánto retiras de "' + m.nombre + '"? (' + symOf(m.moneda) + ')');
             if (v === null) return;
             const monto = parseFloat(v); if (!(monto > 0)) return notify('Monto inválido', 'error');
-            const nuevo = Math.max(0, Number(m.ahorrado) - monto);
-            const movs = Array.isArray(m.movimientos) ? m.movimientos.slice() : [];
-            movs.push({ f: isoDate(todayMidnight()), m: -Math.min(monto, Number(m.ahorrado)) });
-            const { error } = await supa.from('metas').update({ ahorrado: nuevo, movimientos: movs }).eq('id', m.id);
-            if (error) return notify('Error: ' + error.message, 'error');
-            notify('Retiro registrado', 'ok'); await loadMetas();
+            if (busy.value) return; busy.value = true;
+            try {
+                const nuevo = Math.max(0, Number(m.ahorrado) - monto);
+                const movs = Array.isArray(m.movimientos) ? m.movimientos.slice() : [];
+                movs.push({ f: isoDate(todayMidnight()), m: -Math.min(monto, Number(m.ahorrado)) });
+                const { error } = await supa.from('metas').update({ ahorrado: nuevo, movimientos: movs }).eq('id', m.id);
+                if (error) return notify('Error: ' + error.message, 'error');
+                notify('Retiro registrado', 'ok'); await loadMetas();
+            } finally { busy.value = false; }
         }
         async function delMeta(m) {
             if (!confirm('¿Eliminar la meta "' + m.nombre + '"?')) return;
-            const { error } = await supa.from('metas').delete().eq('id', m.id);
-            if (error) return notify('Error: ' + error.message, 'error');
-            notify('Meta eliminada'); await loadMetas();
+            if (busy.value) return; busy.value = true;
+            try {
+                const { error } = await supa.from('metas').delete().eq('id', m.id);
+                if (error) return notify('Error: ' + error.message, 'error');
+                notify('Meta eliminada'); await loadMetas();
+            } finally { busy.value = false; }
         }
         const addMonths = (n) => { const d = todayMidnight(); d.setMonth(d.getMonth() + n); return d; };
         function proyeccion(m) {
@@ -1376,6 +1402,7 @@ createApp({
         function openGastoForm(g) { clearErr(gastoErrors); Object.assign(gastoForm, g ? { ...g } : blankGasto()); showGastoForm.value = true; }
         function closeGastoForm() { showGastoForm.value = false; }
         async function saveGasto() {
+            if (savingGasto.value) return;            // evita doble envío
             if (!validateGasto()) return notify('Revisa los campos marcados', 'error');
             savingGasto.value = true;
             const p = { fecha: gastoForm.fecha || isoDate(todayMidnight()), categoria: gastoForm.categoria || 'otros', descripcion: (gastoForm.descripcion || '').trim(), monto: Number(gastoForm.monto) || 0, moneda: gastoForm.moneda };
@@ -1388,9 +1415,12 @@ createApp({
         }
         async function delGasto(g) {
             if (!confirm('¿Eliminar este gasto?')) return;
-            const { error } = await supa.from('gastos').delete().eq('id', g.id);
-            if (error) return notify('Error: ' + error.message, 'error');
-            notify('Gasto eliminado'); await loadGastos();
+            if (busy.value) return; busy.value = true;
+            try {
+                const { error } = await supa.from('gastos').delete().eq('id', g.id);
+                if (error) return notify('Error: ' + error.message, 'error');
+                notify('Gasto eliminado'); await loadGastos();
+            } finally { busy.value = false; }
         }
         const gastosRealMetrics = computed(() => {
             const conv = (m, de) => convertir(m, de, 'USD') ?? 0;
@@ -1484,7 +1514,7 @@ createApp({
 
         return {
             ready, user, authMode, authEmail, authPassword, authError, authNotice, authLoading, showPassword, recovering, newPassword, toggleAuthMode, authSubmit, logout, resetPassword, setNewPassword,
-            deudas, loadingData, rates, ratesInfo, loadingRates, currentView, verMoneda, filtro, sidebarOpen, showForm, saving, toast,
+            deudas, loadingData, rates, ratesInfo, loadingRates, currentView, verMoneda, filtro, sidebarOpen, showForm, saving, busy, toast,
             formErrors, metaErrors, gastoErrors, dropErr,
             monedas, nav, form, formMode, filtros, planCfg,
             symOf, curColor, sym, fmt, fmtShort, dueDays, dueClass, fmtDate,
