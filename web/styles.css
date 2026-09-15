@@ -497,6 +497,53 @@ body {
 .heat-legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .heat-legend .scale .sw { margin: 0 1px; }
 
+/* ===== Actividad de deudas: panel desplegable (inspirado en Rare UI) ===== */
+.da-panel { margin-top: 16px; border-top: 1px solid var(--border-soft); }
+.da-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; background: transparent; border: 0; cursor: pointer; font-family: inherit; color: var(--text); padding: 14px 2px 0; }
+.da-label { font-size: 14px; font-weight: 700; }
+.da-right { display: flex; align-items: center; gap: 12px; }
+.da-stacks { display: flex; align-items: center; transition: opacity .25s ease; }
+.da-panel.open .da-stacks { opacity: 0; pointer-events: none; }
+.da-stack { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff; border: 2px solid var(--surface); margin-left: -8px; }
+.da-stack:first-child { margin-left: 0; }
+.da-stack.pend { background: var(--warn); }
+.da-stack.paid { background: var(--collect); }
+.da-stack.plan { background: var(--accent); }
+.da-chev { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--surface-3); color: var(--muted); transition: transform .4s cubic-bezier(.22, 1, .36, 1), color .2s ease; }
+.da-chev svg { width: 18px; height: 18px; }
+.da-panel.open .da-chev { transform: rotate(180deg); color: var(--accent); }
+
+.da-body { max-height: 0; overflow: hidden; opacity: 0; transition: max-height .45s cubic-bezier(.22, 1, .36, 1), opacity .35s ease, margin-top .45s ease; }
+.da-panel.open .da-body { max-height: 420px; opacity: 1; margin-top: 12px; }
+
+.da-seg { position: relative; display: flex; gap: 4px; padding: 4px; background: var(--surface-3); border-radius: 12px; margin-bottom: 10px; }
+.da-ind { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 16px) / 3); border-radius: 9px; background: var(--surface); box-shadow: var(--shadow-sm); transform: translateX(calc(var(--i, 0) * (100% + 4px))); transition: transform .34s cubic-bezier(.22, 1, .36, 1); z-index: 0; }
+.da-seg-btn { position: relative; z-index: 1; flex: 1; border: 0; background: transparent; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700; color: var(--muted); padding: 9px 4px; border-radius: 9px; display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; transition: color .2s ease; }
+.da-seg-btn.active { color: var(--text); }
+.da-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.da-dot.pend { background: var(--warn); }
+.da-dot.paid { background: var(--collect); }
+.da-dot.plan { background: var(--accent); }
+
+/* Lista con SCROLL VERTICAL (nunca horizontal) para que no se corte ninguna deuda */
+.da-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 264px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.da-row { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 12px; cursor: pointer; background: var(--surface-2); border: 1px solid var(--border-soft); transition: background .14s ease, transform .12s ease; animation: da-rowin .34s cubic-bezier(.22, 1, .36, 1) both; }
+.da-row:hover { background: var(--surface-3); }
+.da-row:active { transform: scale(.99); }
+.da-ava { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; font-weight: 800; font-size: 12px; color: #fff; }
+.da-ava.pend { background: var(--warn); }
+.da-ava.paid { background: var(--collect); }
+.da-ava.plan { background: var(--accent); }
+.da-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.da-main b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.da-main small { font-size: 11px; color: var(--muted-2); }
+.da-amt { font-size: 13.5px; font-weight: 700; flex: none; }
+.da-empty { text-align: center; color: var(--muted-2); font-size: 12.5px; padding: 22px 0; font-style: italic; }
+
+@keyframes da-rowin { from { opacity: 0; transform: translate(12px, 8px); } to { opacity: 1; transform: none; } }
+@media (max-width: 420px) { .da-seg-btn { font-size: 11px; } .da-seg-btn .da-dot { display: none; } }
+@media (prefers-reduced-motion: reduce) { .da-chev, .da-body, .da-ind, .da-row, .da-stacks { transition: none; animation: none; } }
+
 /* ================= Metas de ahorro ================= */
 .metas-intro { display: inline-flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; color: var(--muted); }
 .metas-intro svg { width: 20px; height: 20px; color: var(--accent); }

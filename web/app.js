@@ -36,6 +36,7 @@ const ICONS = {
     piggy:     '<path d="M19 11c.6 0 1 .4 1 1v2c0 .6-.4 1-1 1h-.5a6 6 0 0 1-11 1.5M4 15a1 1 0 0 1-1-1v-3a5 5 0 0 1 5-5h5a4 4 0 0 1 3.9-3A3 3 0 0 0 22 6"/><path d="M9 8V6"/>',
     chevL:     '<path d="M15 18l-6-6 6-6"/>',
     chevR:     '<path d="M9 18l6-6-6-6"/>',
+    chevD:     '<path d="m6 9 6 6 6-6"/>',
     minus:     '<path d="M5 12h14"/>',
     bell:      '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
     clock:     '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -938,6 +939,32 @@ createApp({
             return { dash: (frac * C).toFixed(1) + ' ' + C.toFixed(1), pct: Math.round(col.pct || 0) };
         }
 
+        /* ---------- Actividad de deudas: panel desplegable (Pendientes/Pagadas/Planificadas) ---------- */
+        const debtsOpen = ref(false);
+        const debtsTab = ref('pend');
+        const payLabel = (key) => { try { return new Date(key + 'T00:00:00').toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }); } catch (e) { return key; } };
+        const debtGroups = computed(() => {
+            const cur = 'USD';
+            const pend = [], paid = [];
+            for (const d of deudas.value) {
+                if (d.tipo !== 'por_pagar') continue;
+                if (d.estado === 'pagada') {
+                    paid.push({ id: 'p' + d.id, n: d.descripcion || 'Sin descripción', s: 'pagada', m: convertir(d.monto, d.moneda, cur) ?? 0, raw: d });
+                } else {
+                    const s = d.recurrente ? ('mensual · día ' + (d.dia_pago || '—')) : (d.fecha_vencimiento ? ('vence ' + d.fecha_vencimiento) : 'sin fecha');
+                    pend.push({ id: 'd' + d.id, n: d.descripcion || 'Sin descripción', s, m: convertir(saldo(d), d.moneda, cur) ?? 0, raw: d });
+                }
+            }
+            const plan = [];
+            for (const it of planItems(cur)) {
+                const key = asign[it.id];
+                if (!key) continue;
+                plan.push({ id: 'x' + it.id, n: it.descripcion, s: 'cobro ' + payLabel(key), m: it.amount, raw: it });
+            }
+            pend.sort((a, b) => b.m - a.m); paid.sort((a, b) => b.m - a.m); plan.sort((a, b) => b.m - a.m);
+            return { pend, paid, plan };
+        });
+
         /* ---------- Suscripciones / mensualidades ---------- */
         const suscripciones = computed(() => {
             const list = deudas.value.filter((d) => d.recurrente && d.tipo === 'por_pagar' && d.estado !== 'pagada');
@@ -1527,6 +1554,7 @@ createApp({
             board, onDrop, autoAsignar, limpiarAsign, verDeuda,
             planSheet, openPlanSheet, closePlanSheet, planMove, planRing,
             settingsTab, settingsSections, settingsGroups, settingsCur, isSetTab, openSetTab, backSetMenu,
+            debtsOpen, debtsTab, debtGroups,
             suscripciones, pagarMes, LEAD_DIAS, subIcon, subLabel,
             health, runHealth, allGreen, checklist, profile, displayName, emailTesting, testEmail,
             COUNTRIES, AVATARS, localTime, paisNombre, paisFlag, paisTzLabel,

@@ -702,9 +702,9 @@
                     <div class="metric"><span class="m-lbl">Vencido este mes</span><span class="m-val mono" :class="gastos.mesVencido > 0 ? 'txt-late' : ''">$ <count-up :value="gastos.mesVencido"></count-up></span><span class="m-sub">atrasado</span></div>
                 </div>
 
-                <div class="card">
+                <div class="card da-card">
                     <div class="card-head heat-head">
-                        <div><h2>Calendario de pagos</h2><span class="card-sub">Cada recuadro es un día · más intenso = más monto</span></div>
+                        <div><h2>Actividad de deudas</h2><span class="card-sub">Tu calendario de pagos · despliega tus deudas por estado</span></div>
                         <div class="heat-nav">
                             <button class="icon-btn sm" @click="heatYear--" aria-label="Año anterior"><icon name="chevL"></icon></button>
                             <span class="heat-year mono">{{ heatYear }}</span>
@@ -725,7 +725,38 @@
                         <span class="hl"><i class="sw" style="background:#E6A94E"></i> Por pagar</span>
                         <span class="hl"><i class="sw" style="background:#F5860F"></i> Planificado</span>
                         <span class="hl"><i class="sw" style="background:#2EA043"></i> Pagado</span>
-                        <span class="hl scale">menos <i class="sw" style="background:var(--surface-3)"></i><i class="sw" style="background:rgba(124,147,255,.4)"></i><i class="sw" style="background:rgba(124,147,255,.7)"></i><i class="sw" style="background:rgba(124,147,255,1)"></i> más</span>
+                        <span class="hl scale">menos <i class="sw" style="background:var(--surface-3)"></i><i class="sw" style="background:rgba(79,124,255,.4)"></i><i class="sw" style="background:rgba(79,124,255,.7)"></i><i class="sw" style="background:rgba(79,124,255,1)"></i> más</span>
+                    </div>
+
+                    <!-- Panel desplegable de deudas (interacción inspirada en Rare UI, en nuestro stack) -->
+                    <div class="da-panel" :class="{ open: debtsOpen }">
+                        <button type="button" class="da-head" @click="debtsOpen = !debtsOpen" :aria-expanded="debtsOpen">
+                            <span class="da-label">Mis deudas</span>
+                            <span class="da-right">
+                                <span class="da-stacks">
+                                    <span class="da-stack pend" title="Pendientes">{{ debtGroups.pend.length }}</span>
+                                    <span class="da-stack paid" title="Pagadas">{{ debtGroups.paid.length }}</span>
+                                    <span class="da-stack plan" title="Planificadas">{{ debtGroups.plan.length }}</span>
+                                </span>
+                                <span class="da-chev"><icon name="chevD"></icon></span>
+                            </span>
+                        </button>
+                        <div class="da-body">
+                            <div class="da-seg" :style="{ '--i': ['pend','paid','plan'].indexOf(debtsTab) }">
+                                <span class="da-ind"></span>
+                                <button type="button" class="da-seg-btn" :class="{ active: debtsTab === 'pend' }" @click="debtsTab = 'pend'"><span class="da-dot pend"></span>Pendientes</button>
+                                <button type="button" class="da-seg-btn" :class="{ active: debtsTab === 'paid' }" @click="debtsTab = 'paid'"><span class="da-dot paid"></span>Pagadas</button>
+                                <button type="button" class="da-seg-btn" :class="{ active: debtsTab === 'plan' }" @click="debtsTab = 'plan'"><span class="da-dot plan"></span>Planificadas</button>
+                            </div>
+                            <ul class="da-list">
+                                <li v-for="(it, i) in debtGroups[debtsTab]" :key="it.id" class="da-row" :class="debtsTab" :style="{ animationDelay: (i * 0.045) + 's' }" @click="it.raw && verDeuda(it.raw)" title="Ver detalle">
+                                    <span class="da-ava" :class="debtsTab">{{ (it.n || '?').charAt(0) }}</span>
+                                    <span class="da-main"><b>{{ it.n }}</b><small>{{ it.s }}</small></span>
+                                    <span class="da-amt mono">$ {{ fmt(it.m) }}</span>
+                                </li>
+                                <li v-if="!debtGroups[debtsTab].length" class="da-empty">Nada aquí todavía</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
