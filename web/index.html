@@ -97,13 +97,22 @@
 
         <nav class="nav">
             <p class="nav-group">Finanzas</p>
-            <button v-for="item in nav" :key="item.id"
-                    class="nav-item" :class="{ active: currentView === item.id, disabled: item.soon }"
-                    @click="item.soon ? null : go(item.id)">
-                <icon :name="item.icon"></icon>
-                <span>{{ item.label }}</span>
-                <span v-if="item.soon" class="soon">pronto</span>
-            </button>
+            <template v-for="item in nav" :key="item.id">
+                <button class="nav-item" :class="{ active: currentView === item.id, disabled: item.soon, expanded: item.id === 'ajustes' && currentView === 'ajustes' }"
+                        @click="item.soon ? null : go(item.id)">
+                    <icon :name="item.icon"></icon>
+                    <span>{{ item.label }}</span>
+                    <icon v-if="item.id === 'ajustes'" name="chevR" class="nav-caret"></icon>
+                    <span v-if="item.soon" class="soon">pronto</span>
+                </button>
+                <transition name="subnav">
+                    <div v-if="item.id === 'ajustes' && currentView === 'ajustes'" class="nav-sub">
+                        <button v-for="s in settingsSections" :key="s.id" class="nav-subitem" :class="{ active: isSetTab(s.id) }" @click="openSetTab(s.id)">
+                            <icon :name="s.icon"></icon><span>{{ s.label }}</span>
+                        </button>
+                    </div>
+                </transition>
+            </template>
         </nav>
 
         <div class="sidebar-foot">
@@ -813,64 +822,111 @@
             </section>
 
             <!-- AJUSTES / SISTEMA -->
-            <section v-show="currentView === 'ajustes'" class="view">
-                <div class="card profile-card">
-                    <div class="pf-view">
-                        <avatar :avatar="profile.avatar" :name="displayName" :size="86"></avatar>
-                        <span class="pf-badge">{{ paisNombre ? (paisFlag + ' ' + paisNombre) : 'Cuenta personal' }}</span>
-                        <h2 class="pf-name">{{ displayName }}</h2>
-                        <span class="pf-sub">{{ user.email }}</span>
-                        <div class="pf-chips">
-                            <span class="pf-chip mono">{{ user.email }}</span>
-                            <span class="pf-chip" v-if="paisTzLabel"><icon name="clock"></icon> {{ paisTzLabel }}</span>
+            <section v-show="currentView === 'ajustes'" class="view settings" :class="{ 'at-menu': !settingsTab }">
+                <!-- MÓVIL: lista agrupada de ajustes -->
+                <div class="set-menu">
+                    <div v-for="g in settingsGroups" :key="g.name" class="set-group">
+                        <p class="set-group-title">{{ g.name }}</p>
+                        <div class="set-card">
+                            <button v-for="s in g.items" :key="s.id" type="button" class="set-row" @click="openSetTab(s.id)">
+                                <span class="set-ico"><icon :name="s.icon"></icon></span>
+                                <span class="set-row-main"><b>{{ s.label }}</b><small>{{ s.desc }}</small></span>
+                                <icon name="chevR" class="set-chev"></icon>
+                            </button>
                         </div>
-                        <div class="pf-localtime" v-if="localTime"><span>Hora local:</span> <b class="mono">{{ localTime }}</b></div>
-                        <button class="btn block pf-edit" @click="openProfileForm"><icon name="edit"></icon> Editar perfil</button>
                     </div>
                 </div>
 
-                <div v-if="allGreen" class="card sys-banner"><icon name="check"></icon><div><b>Todo en verde.</b> Base de datos, sincronización, gastos y correo están listos.</div></div>
+                <!-- MÓVIL: volver al menú desde una sección -->
+                <button type="button" class="set-back" @click="backSetMenu"><icon name="chevL"></icon> <span>Ajustes</span></button>
 
-                <div class="card">
-                    <div class="card-head heat-head">
-                        <div><h2>Estado del sistema</h2><span class="card-sub">Chequeo en vivo de las dependencias en Supabase</span></div>
-                        <button class="btn btn-sm" :class="{ spin: health.checking }" @click="runHealth"><icon name="refresh"></icon> Rechequear</button>
-                    </div>
-                    <ul class="sys-list">
-                        <li><span class="sys-dot" :class="health.deudasCols ? 'ok' : 'bad'"></span><div class="sys-main"><b>Base de datos (deudas)</b><small>Columnas de recurrentes, abonos y crédito</small></div><span class="sys-tag" :class="health.deudasCols ? 'ok' : 'bad'">{{ health.checked ? (health.deudasCols ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
-                        <li><span class="sys-dot" :class="health.metas ? 'ok' : 'bad'"></span><div class="sys-main"><b>Metas de ahorro</b><small>Tabla metas</small></div><span class="sys-tag" :class="health.metas ? 'ok' : 'bad'">{{ health.checked ? (health.metas ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
-                        <li><span class="sys-dot" :class="health.settings ? 'ok' : 'bad'"></span><div class="sys-main"><b>Sincronización entre dispositivos</b><small>Tabla user_settings · plan, tasas y proveedores</small></div><span class="sys-tag" :class="health.settings ? 'ok' : 'bad'">{{ health.checked ? (health.settings ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
-                        <li><span class="sys-dot" :class="health.gastos ? 'ok' : 'bad'"></span><div class="sys-main"><b>Gastos reales</b><small>Tabla gastos</small></div><span class="sys-tag" :class="health.gastos ? 'ok' : 'bad'">{{ health.checked ? (health.gastos ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
-                    </ul>
-                    <p v-if="health.checked && !(health.deudasCols && health.metas && health.settings && health.gastos)" class="sys-fix">
-                        <icon name="alert"></icon> Abre <b>Supabase → SQL Editor</b>, pega el archivo <b>supabase/setup.sql</b> del proyecto y pulsa <b>Run</b>. Luego “Rechequear”.
-                    </p>
-                </div>
+                <!-- PANELES: en escritorio siempre visible el activo; en móvil al entrar a una sección -->
+                <div class="set-panels">
+                    <transition name="panel" mode="out-in">
+                        <div class="set-stack" :key="settingsCur.id">
+                            <!-- Perfil -->
+                            <div class="set-panel" v-show="isSetTab('perfil')">
+                                <div class="card profile-card">
+                                    <div class="pf-view">
+                                        <avatar :avatar="profile.avatar" :name="displayName" :size="86"></avatar>
+                                        <span class="pf-badge">{{ paisNombre ? (paisFlag + ' ' + paisNombre) : 'Cuenta personal' }}</span>
+                                        <h2 class="pf-name">{{ displayName }}</h2>
+                                        <span class="pf-sub">{{ user.email }}</span>
+                                        <div class="pf-chips">
+                                            <span class="pf-chip mono">{{ user.email }}</span>
+                                            <span class="pf-chip" v-if="paisTzLabel"><icon name="clock"></icon> {{ paisTzLabel }}</span>
+                                        </div>
+                                        <div class="pf-localtime" v-if="localTime"><span>Hora local:</span> <b class="mono">{{ localTime }}</b></div>
+                                        <button class="btn block pf-edit" @click="openProfileForm"><icon name="edit"></icon> Editar perfil</button>
+                                    </div>
+                                </div>
+                            </div>
 
-                <div class="card">
-                    <div class="card-head"><h2>Acciones pendientes</h2><span class="card-sub">Un clic tuyo cada una · quedan guardadas y sincronizadas</span></div>
-                    <ul class="sys-list">
-                        <li>
-                            <span class="sys-dot" :class="checklist.emailDeployed ? 'ok' : 'bad'"></span>
-                            <div class="sys-main"><b>Correo de recordatorios</b><small>Desplegar la Edge Function + cron · guía en supabase/DESPLIEGUE.md</small></div>
-                            <button class="btn btn-xs" :disabled="emailTesting" @click="testEmail"><icon name="bell"></icon> {{ emailTesting ? 'Probando…' : 'Enviar prueba' }}</button>
-                            <label class="sys-check"><input type="checkbox" v-model="checklist.emailDeployed"> Hecho</label>
-                        </li>
-                        <li>
-                            <span class="sys-dot" :class="checklist.dbPasswordReset ? 'ok' : 'bad'"></span>
-                            <div class="sys-main"><b>Resetear contraseña de la BD</b><small>Supabase → Settings → Database → Reset password</small></div>
-                            <label class="sys-check"><input type="checkbox" v-model="checklist.dbPasswordReset"> Hecho</label>
-                        </li>
-                    </ul>
-                </div>
+                            <!-- Estado del sistema -->
+                            <div class="set-panel" v-show="isSetTab('sistema')">
+                                <div v-if="allGreen" class="card sys-banner"><icon name="check"></icon><div><b>Todo en verde.</b> Base de datos, sincronización, gastos y correo están listos.</div></div>
+                                <div class="card">
+                                    <div class="card-head heat-head">
+                                        <div><h2>Estado del sistema</h2><span class="card-sub">Chequeo en vivo de las dependencias en Supabase</span></div>
+                                        <button class="btn btn-sm" :class="{ spin: health.checking }" @click="runHealth"><icon name="refresh"></icon> Rechequear</button>
+                                    </div>
+                                    <ul class="sys-list">
+                                        <li><span class="sys-dot" :class="health.deudasCols ? 'ok' : 'bad'"></span><div class="sys-main"><b>Base de datos (deudas)</b><small>Columnas de recurrentes, abonos y crédito</small></div><span class="sys-tag" :class="health.deudasCols ? 'ok' : 'bad'">{{ health.checked ? (health.deudasCols ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
+                                        <li><span class="sys-dot" :class="health.metas ? 'ok' : 'bad'"></span><div class="sys-main"><b>Metas de ahorro</b><small>Tabla metas</small></div><span class="sys-tag" :class="health.metas ? 'ok' : 'bad'">{{ health.checked ? (health.metas ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
+                                        <li><span class="sys-dot" :class="health.settings ? 'ok' : 'bad'"></span><div class="sys-main"><b>Sincronización entre dispositivos</b><small>Tabla user_settings · plan, tasas y proveedores</small></div><span class="sys-tag" :class="health.settings ? 'ok' : 'bad'">{{ health.checked ? (health.settings ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
+                                        <li><span class="sys-dot" :class="health.gastos ? 'ok' : 'bad'"></span><div class="sys-main"><b>Gastos reales</b><small>Tabla gastos</small></div><span class="sys-tag" :class="health.gastos ? 'ok' : 'bad'">{{ health.checked ? (health.gastos ? 'Listo' : 'Falta setup.sql') : '…' }}</span></li>
+                                    </ul>
+                                    <p v-if="health.checked && !(health.deudasCols && health.metas && health.settings && health.gastos)" class="sys-fix">
+                                        <icon name="alert"></icon> Abre <b>Supabase → SQL Editor</b>, pega el archivo <b>supabase/setup.sql</b> del proyecto y pulsa <b>Run</b>. Luego “Rechequear”.
+                                    </p>
+                                </div>
+                            </div>
 
-                <div class="card">
-                    <div class="card-head"><h2>Respaldo y exportación</h2><span class="card-sub">Se descarga en tu dispositivo, sin enviar nada a terceros</span></div>
-                    <div class="sys-actions">
-                        <button class="btn" @click="exportCSV"><icon name="download"></icon> Exportar deudas (CSV)</button>
-                        <button class="btn" @click="exportBackup"><icon name="download"></icon> Respaldo completo (JSON)</button>
-                    </div>
-                    <p class="hint"><icon name="alert"></icon> Para “reiniciar” tu cuenta, edita o borra deudas — <b>nunca borres el usuario</b>: eliminarlo borra en cascada todas tus deudas y metas.</p>
+                            <!-- Acciones pendientes -->
+                            <div class="set-panel" v-show="isSetTab('pendientes')">
+                                <div class="card">
+                                    <div class="card-head"><h2>Acciones pendientes</h2><span class="card-sub">Un clic tuyo cada una · quedan guardadas y sincronizadas</span></div>
+                                    <ul class="sys-list">
+                                        <li>
+                                            <span class="sys-dot" :class="checklist.emailDeployed ? 'ok' : 'bad'"></span>
+                                            <div class="sys-main"><b>Correo de recordatorios</b><small>Desplegar la Edge Function + cron · guía en supabase/DESPLIEGUE.md</small></div>
+                                            <button class="btn btn-xs" :disabled="emailTesting" @click="testEmail"><icon name="bell"></icon> {{ emailTesting ? 'Probando…' : 'Enviar prueba' }}</button>
+                                            <label class="sys-check"><input type="checkbox" v-model="checklist.emailDeployed"> Hecho</label>
+                                        </li>
+                                        <li>
+                                            <span class="sys-dot" :class="checklist.dbPasswordReset ? 'ok' : 'bad'"></span>
+                                            <div class="sys-main"><b>Resetear contraseña de la BD</b><small>Supabase → Settings → Database → Reset password</small></div>
+                                            <label class="sys-check"><input type="checkbox" v-model="checklist.dbPasswordReset"> Hecho</label>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <!-- Respaldo y exportación -->
+                            <div class="set-panel" v-show="isSetTab('respaldo')">
+                                <div class="card">
+                                    <div class="card-head"><h2>Respaldo y exportación</h2><span class="card-sub">Se descarga en tu dispositivo, sin enviar nada a terceros</span></div>
+                                    <div class="sys-actions">
+                                        <button class="btn" @click="exportCSV"><icon name="download"></icon> Exportar deudas (CSV)</button>
+                                        <button class="btn" @click="exportBackup"><icon name="download"></icon> Respaldo completo (JSON)</button>
+                                    </div>
+                                    <p class="hint"><icon name="alert"></icon> Para “reiniciar” tu cuenta, edita o borra deudas — <b>nunca borres el usuario</b>: eliminarlo borra en cascada todas tus deudas y metas.</p>
+                                </div>
+                            </div>
+
+                            <!-- Cuenta -->
+                            <div class="set-panel" v-show="isSetTab('cuenta')">
+                                <div class="card">
+                                    <div class="card-head"><h2>Cuenta</h2><span class="card-sub">Sesión iniciada como {{ user.email }}</span></div>
+                                    <div class="sys-actions">
+                                        <button class="btn" @click="openProfileForm"><icon name="edit"></icon> Editar perfil</button>
+                                        <button class="btn danger-ghost" @click="logout"><icon name="logout"></icon> Cerrar sesión</button>
+                                    </div>
+                                    <p class="hint"><icon name="alert"></icon> Para borrar tu cuenta, entra a <b>“Editar perfil”</b>: eliminarla borra en cascada todas tus deudas y metas.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </transition>
                 </div>
             </section>
         </main>

@@ -42,6 +42,8 @@ const ICONS = {
     calendar:  '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
     cashea:    '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
     gear:      '<circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9Z"/>',
+    user:      '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    activity:  '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
     download:  '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
     tag:       '<path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
     calc:      '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14v4M8 18h4"/>',
@@ -222,6 +224,22 @@ createApp({
             { id: 'calc',      label: 'Calculadora', icon: 'calc' },
             { id: 'ajustes',   label: 'Ajustes', icon: 'gear' },
         ];
+
+        /* ---------- Ajustes atómico: subsecciones ---------- */
+        // '' = menú (en móvil) o Perfil por defecto (en escritorio)
+        const settingsTab = ref('');
+        const settingsSections = [
+            { id: 'perfil',     label: 'Perfil',                 desc: 'Tu cuenta, nombre y país',       icon: 'user',     group: 'Perfil' },
+            { id: 'sistema',    label: 'Estado del sistema',     desc: 'Chequeo de la base de datos',    icon: 'activity', group: 'Sistema' },
+            { id: 'pendientes', label: 'Acciones pendientes',    desc: 'Correo y contraseña de la BD',   icon: 'bell',     group: 'Sistema' },
+            { id: 'respaldo',   label: 'Respaldo y exportación', desc: 'Descarga tus datos (CSV/JSON)',  icon: 'download', group: 'Sistema' },
+            { id: 'cuenta',     label: 'Cuenta',                 desc: 'Editar perfil y cerrar sesión',  icon: 'logout',   group: 'Cuenta' },
+        ];
+        const settingsGroups = ['Perfil', 'Sistema', 'Cuenta'].map((g) => ({ name: g, items: settingsSections.filter((s) => s.group === g) }));
+        const settingsCur = computed(() => settingsSections.find((s) => s.id === (settingsTab.value || 'perfil')) || settingsSections[0]);
+        function isSetTab(id) { return settingsTab.value === id || (settingsTab.value === '' && id === 'perfil'); }
+        function openSetTab(id) { if (currentView.value !== 'ajustes') { currentView.value = 'ajustes'; location.hash = 'ajustes'; } settingsTab.value = id; sidebarOpen.value = false; }
+        function backSetMenu() { settingsTab.value = ''; }
         const blankForm = () => ({ id: null, tipo: 'por_pagar', descripcion: '', contraparte: '', moneda: 'USD', monto: null, fecha_vencimiento: '', notas: '', recurrente: false, dia_pago: 2, monto_abonado: 0, abonos: [], plan: '', inicial: 0, cuotas: [], n_cuotas: 6, monto_cuota: null, frecuencia: 'cada14', fecha_1a: '', cuotas_pagadas: 0 });
         const form = reactive(blankForm());
         const formMode = ref('edit'); // 'view' (carta de detalle) | 'edit' (formulario)
@@ -643,7 +661,7 @@ createApp({
         function openForm(d, mode = 'edit') { clearErr(formErrors); Object.assign(form, d ? { ...d } : blankForm()); if (esFinanciado(form)) form.plan = credLabel(form.plan); formMode.value = d ? mode : 'edit'; provAdding.value = false; showForm.value = true; }
         function closeForm() { showForm.value = false; }
         function editForm() { formMode.value = 'edit'; }
-        function go(view) { currentView.value = view; sidebarOpen.value = false; location.hash = view; }
+        function go(view) { currentView.value = view; sidebarOpen.value = false; location.hash = view; if (view === 'ajustes') settingsTab.value = ''; }
 
         /* ---------- Entrada escalonada de tarjetas (Motion One) ---------- */
         function animateView() {
@@ -1471,6 +1489,7 @@ createApp({
             heatYear, gastos, metas, showMetaForm, savingMeta, metaForm, openMetaForm, closeMetaForm, saveMeta, aportarMeta, quitarAporte, delMeta, proyeccion,
             board, onDrop, autoAsignar, limpiarAsign, verDeuda,
             planSheet, openPlanSheet, closePlanSheet, planMove, planRing,
+            settingsTab, settingsSections, settingsGroups, settingsCur, isSetTab, openSetTab, backSetMenu,
             suscripciones, pagarMes, LEAD_DIAS, subIcon, subLabel,
             health, runHealth, allGreen, checklist, profile, displayName, emailTesting, testEmail,
             COUNTRIES, AVATARS, localTime, paisNombre, paisFlag, paisTzLabel,
