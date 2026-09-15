@@ -716,7 +716,7 @@
                             <span v-for="mo in gastos.months" :key="mo.col" class="heat-month" :style="{ gridColumnStart: mo.col + 1 }">{{ mo.label }}</span>
                         </div>
                         <div class="heat-grid">
-                            <div v-for="(cell, i) in gastos.weeks.flat()" :key="i" class="heat-cell" :class="{ empty: !cell }" :style="cell ? { background: cell.bg } : {}" :title="cell ? cell.label + ' · $' + fmt(cell.tot) : ''"></div>
+                            <div v-for="(cell, i) in gastos.weeks.flat()" :key="i" class="heat-cell" :class="{ empty: !cell }" :style="cell ? { background: cell.bg } : {}" @mouseenter="heatEnter(cell, $event)" @mouseleave="heatLeave"></div>
                         </div>
                     </div>
                     <p v-else class="empty big"><icon name="expenses"></icon> Sin pagos con fecha en {{ heatYear }}. Agrega deudas con fecha de vencimiento para ver tu calendario.</p>
@@ -727,6 +727,18 @@
                         <span class="hl"><i class="sw" style="background:#2EA043"></i> Pagado</span>
                         <span class="hl scale">menos <i class="sw" style="background:var(--surface-3)"></i><i class="sw" style="background:rgba(79,124,255,.4)"></i><i class="sw" style="background:rgba(79,124,255,.7)"></i><i class="sw" style="background:rgba(79,124,255,1)"></i> más</span>
                     </div>
+                    <!-- Tooltip del heatmap (diseño propio, fixed → no lo recorta el overflow) -->
+                    <transition name="fade">
+                        <div v-if="heatTip.show && heatTip.cell" class="heat-tip" :style="{ left: heatTip.x + 'px', top: heatTip.y + 'px' }">
+                            <div class="ht-date">{{ heatTip.cell.label }}</div>
+                            <ul class="ht-rows">
+                                <li v-if="heatTip.cell.c.g > 0"><span class="ht-dot" style="background:#2EA043"></span><span class="ht-k">Pagado</span><span class="ht-v mono">$ {{ fmt(heatTip.cell.c.g) }}</span></li>
+                                <li v-if="heatTip.cell.c.o > 0"><span class="ht-dot" style="background:#F5860F"></span><span class="ht-k">Planificado</span><span class="ht-v mono">$ {{ fmt(heatTip.cell.c.o) }}</span></li>
+                                <li v-if="heatTip.cell.c.y > 0"><span class="ht-dot" style="background:#E6A94E"></span><span class="ht-k">Por pagar</span><span class="ht-v mono">$ {{ fmt(heatTip.cell.c.y) }}</span></li>
+                                <li v-if="heatTip.cell.c.r > 0"><span class="ht-dot" style="background:#E5484D"></span><span class="ht-k">Vencido</span><span class="ht-v mono">$ {{ fmt(heatTip.cell.c.r) }}</span></li>
+                            </ul>
+                        </div>
+                    </transition>
 
                     <!-- Panel desplegable de deudas (interacción inspirada en Rare UI, en nuestro stack) -->
                     <div class="da-panel" :class="{ open: debtsOpen }">
@@ -960,6 +972,41 @@
                     </transition>
                 </div>
             </section>
+
+            <!-- BITÁCORA -->
+            <section v-show="currentView === 'bitacora'" class="view">
+                <div class="view-tools bita-tools">
+                    <div class="seg bita-filters">
+                        <button v-for="f in bitacoraFilters" :key="f.k" class="seg-btn" :class="{ active: bitacoraFilter === f.k }" @click="bitacoraFilter = f.k">{{ f.label }}</button>
+                    </div>
+                    <button class="btn btn-sm" v-if="bitacora.length" @click="limpiarBitacora"><icon name="trash"></icon> Vaciar</button>
+                </div>
+
+                <div v-if="bitacoraGroups.length" class="bita">
+                    <div v-for="g in bitacoraGroups" :key="g.day" class="bita-group">
+                        <div class="bita-day"><span>{{ g.label }}</span></div>
+                        <ul class="bita-list">
+                            <li v-for="e in g.items" :key="e.id" class="bita-item" :class="bitaInfo(e.type).cls">
+                                <span class="bita-ico" :class="bitaInfo(e.type).cls"><icon :name="bitaInfo(e.type).icon"></icon></span>
+                                <div class="bita-main">
+                                    <b>{{ e.title }}</b>
+                                    <small>{{ e.detail }}</small>
+                                </div>
+                                <div class="bita-side">
+                                    <span v-if="e.amount != null" class="bita-amt mono">{{ e.moneda ? symOf(e.moneda) : '$' }} {{ fmt(e.amount) }}</span>
+                                    <span class="bita-time mono">{{ fmtTime(e.at) }}</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    <p class="bita-note"><icon name="alert"></icon> La bitácora se guarda en <b>este dispositivo</b> y registra tu actividad desde ahora. Se conservan los últimos 400 movimientos.</p>
+                </div>
+                <div v-else class="card empty big">
+                    <icon name="book"></icon>
+                    <template v-if="bitacoraFilter !== 'all'">Sin movimientos de este tipo todavía.</template>
+                    <template v-else>Aún no hay actividad registrada. Cuando agregues, pagues o edites algo, aparecerá aquí con su fecha y hora.</template>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -999,6 +1046,7 @@
                         <div class="det-row"><span class="dr-k">{{ det.fin ? 'Comercio' : (form.tipo === 'por_pagar' ? 'A quién le debes' : 'Quién te debe') }}</span><span class="dr-v">{{ form.contraparte || '—' }}</span></div>
                         <div class="det-row" v-if="form.fecha_vencimiento"><span class="dr-k">{{ det.fin ? 'Próxima cuota' : 'Vence' }}</span><span class="dr-v">{{ form.fecha_vencimiento }} <small v-if="det.vence && !det.pagada" :class="det.venceCls">· {{ det.vence }}</small></span></div>
                         <div class="det-row"><span class="dr-k">Moneda</span><span class="dr-v" :style="{ color: curColor(form.moneda) }">{{ form.moneda }}</span></div>
+                        <div class="det-row" v-if="det.pagada && form.pagado_en"><span class="dr-k">Pagada el</span><span class="dr-v"><icon name="check" class="dr-paid"></icon> {{ fmtDateTime(form.pagado_en) }}</span></div>
                         <div class="det-row" v-if="det.fin && det.monto"><span class="dr-k">Total financiado</span><span class="dr-v mono">{{ symOf(form.moneda) }} {{ fmt(det.monto) }}</span></div>
                         <div class="det-row" v-if="form.notas"><span class="dr-k">Notas</span><span class="dr-v">{{ form.notas }}</span></div>
                     </div>
@@ -1018,7 +1066,7 @@
                     <div v-if="!det.fin && form.abonos && form.abonos.length" class="det-sec">
                         <span class="det-sec-lbl">Historial de abonos</span>
                         <ul class="ab-list">
-                            <li v-for="(a, i) in form.abonos" :key="i"><span class="ab-date">{{ a.f }}</span><span class="mono ab-amt">{{ symOf(form.moneda) }} {{ fmt(a.m) }}</span></li>
+                            <li v-for="(a, i) in form.abonos" :key="i"><span class="ab-date">{{ a.f }}<small v-if="a.t" class="ab-time"> · {{ fmtTime(a.t) }}</small></span><span class="mono ab-amt">{{ symOf(form.moneda) }} {{ fmt(a.m) }}</span></li>
                         </ul>
                     </div>
 
@@ -1131,7 +1179,7 @@
                         </div>
                         <ul class="ab-list" v-if="form.abonos && form.abonos.length">
                             <li v-for="(a, i) in form.abonos" :key="i">
-                                <span class="ab-date">{{ a.f }}</span>
+                                <span class="ab-date">{{ a.f }}<small v-if="a.t" class="ab-time"> · {{ fmtTime(a.t) }}</small></span>
                                 <span class="mono ab-amt">{{ symOf(form.moneda) }} {{ fmt(a.m) }}</span>
                                 <button type="button" class="icon-btn sm act-eliminar" title="Borrar este abono" @click="delAbonoForm(i)"><icon name="trash"></icon></button>
                             </li>

@@ -35,6 +35,7 @@ alter table public.deudas add column if not exists abonos jsonb not null default
 alter table public.deudas add column if not exists plan text default '';          -- '' normal | nombre del proveedor de crédito (ej: 'Cashea', 'Mundo Total')
 alter table public.deudas add column if not exists inicial numeric default 0;
 alter table public.deudas add column if not exists cuotas jsonb not null default '[]'::jsonb;
+alter table public.deudas add column if not exists pagado_en timestamptz;      -- marca de tiempo de cuándo se saldó
 
 create index if not exists deudas_user_idx on public.deudas (user_id);
 alter table public.deudas enable row level security;

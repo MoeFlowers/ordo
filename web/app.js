@@ -37,6 +37,7 @@ const ICONS = {
     chevL:     '<path d="M15 18l-6-6 6-6"/>',
     chevR:     '<path d="M9 18l6-6-6-6"/>',
     chevD:     '<path d="m6 9 6 6 6-6"/>',
+    book:      '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
     minus:     '<path d="M5 12h14"/>',
     bell:      '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
     clock:     '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -225,6 +226,7 @@ createApp({
             { id: 'metas',     label: 'Metas de ahorro', icon: 'goal' },
             { id: 'tasas',     label: 'Tasas de cambio', icon: 'rates' },
             { id: 'calc',      label: 'Calculadora', icon: 'calc' },
+            { id: 'bitacora',  label: 'Bitácora', icon: 'book' },
             { id: 'ajustes',   label: 'Ajustes', icon: 'gear' },
         ];
 
@@ -291,6 +293,80 @@ createApp({
 
         /* Gastos (heatmap) y Metas de ahorro */
         const heatYear = ref(new Date().getFullYear());
+
+        /* ---------- Fecha + hora legible (para marcas de tiempo y bitácora) ---------- */
+        function fmtDateTime(iso) {
+            if (!iso) return '';
+            const d = new Date(iso); if (isNaN(d.getTime())) return String(iso);
+            const p = (n) => String(n).padStart(2, '0');
+            return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}, ${p(d.getHours())}:${p(d.getMinutes())}`;
+        }
+        const fmtTime = (iso) => { const d = new Date(iso); return isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+
+        /* ---------- Bitácora: registro de actividad (local, por dispositivo) ---------- */
+        const BITACORA_CAP = 400;
+        const bitacora = ref([]);
+        try { const raw = JSON.parse(localStorage.getItem('bitacora') || '[]'); if (Array.isArray(raw)) bitacora.value = raw; } catch (e) {}
+        const bitacoraFilter = ref('all');
+        const bitacoraFilters = [
+            { k: 'all', label: 'Todo' }, { k: 'deuda', label: 'Deudas' },
+            { k: 'pago', label: 'Pagos' }, { k: 'meta', label: 'Metas' }, { k: 'gasto', label: 'Gastos' },
+        ];
+        const BITA = {
+            deuda_add:  { icon: 'plus',     cls: 'add',  cat: 'deuda' },
+            deuda_edit: { icon: 'edit',     cls: 'edit', cat: 'deuda' },
+            deuda_del:  { icon: 'trash',    cls: 'del',  cat: 'deuda' },
+            pago:       { icon: 'check',    cls: 'pay',  cat: 'pago' },
+            pago_undo:  { icon: 'repeat',   cls: 'edit', cat: 'pago' },
+            mes:        { icon: 'check',    cls: 'pay',  cat: 'pago' },
+            abono:      { icon: 'cash',     cls: 'pay',  cat: 'pago' },
+            meta_add:   { icon: 'goal',     cls: 'meta', cat: 'meta' },
+            meta_del:   { icon: 'trash',    cls: 'del',  cat: 'meta' },
+            aporte:     { icon: 'goal',     cls: 'pay',  cat: 'meta' },
+            retiro:     { icon: 'goal',     cls: 'edit', cat: 'meta' },
+            gasto_add:  { icon: 'expenses', cls: 'exp',  cat: 'gasto' },
+            gasto_del:  { icon: 'trash',    cls: 'del',  cat: 'gasto' },
+        };
+        const bitaInfo = (t) => BITA[t] || { icon: 'wallet', cls: 'edit', cat: 'deuda' };
+        function logEvent(type, title, detail = '', amount = null, moneda = '') {
+            bitacora.value.unshift({ id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), at: new Date().toISOString(), type, title: title || '—', detail, amount, moneda });
+            if (bitacora.value.length > BITACORA_CAP) bitacora.value.length = BITACORA_CAP;
+            try { localStorage.setItem('bitacora', JSON.stringify(bitacora.value)); } catch (e) {}
+        }
+        function dayLabel(day) {
+            const today = isoDate(todayMidnight());
+            const yd = new Date(todayMidnight()); yd.setDate(yd.getDate() - 1);
+            if (day === today) return 'Hoy';
+            if (day === isoDate(yd)) return 'Ayer';
+            const d = new Date(day + 'T00:00:00');
+            return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
+        }
+        const bitacoraGroups = computed(() => {
+            const f = bitacoraFilter.value;
+            const list = bitacora.value.filter((e) => f === 'all' || bitaInfo(e.type).cat === f);
+            const groups = []; let cur = null;
+            for (const e of list) {
+                const day = (e.at || '').slice(0, 10);
+                if (!cur || cur.day !== day) { cur = { day, label: dayLabel(day), items: [] }; groups.push(cur); }
+                cur.items.push(e);
+            }
+            return groups;
+        });
+        function limpiarBitacora() {
+            if (!confirm('¿Vaciar toda la bitácora? Esto no borra tus deudas, solo el historial de actividad de este dispositivo.')) return;
+            bitacora.value = []; try { localStorage.removeItem('bitacora'); } catch (e) {}
+            notify('Bitácora vaciada');
+        }
+
+        /* ---------- Tooltip del heatmap (diseño propio) ---------- */
+        const heatTip = reactive({ show: false, x: 0, y: 0, cell: null });
+        function heatEnter(cell, ev) {
+            if (!cell || cell.tot <= 0) { heatTip.show = false; return; }
+            const r = ev.currentTarget.getBoundingClientRect();
+            const x = Math.min(Math.max(r.left + r.width / 2, 96), window.innerWidth - 96);
+            heatTip.cell = cell; heatTip.x = x; heatTip.y = r.top; heatTip.show = true;
+        }
+        const heatLeave = () => { heatTip.show = false; };
         const metas = ref([]);
         const showMetaForm = ref(false);
         const savingMeta = ref(false);
@@ -484,6 +560,8 @@ createApp({
                 estado = (montoNum > 0 && abon >= montoNum - 0.0001) ? 'pagada' : 'pendiente';
                 extra = { recurrente, dia_pago: dia, abonos: Array.isArray(form.abonos) ? form.abonos : [], plan: '', cuotas: [] };
             }
+            // marca de tiempo de pago: conserva la existente al editar, o sella ahora si quedó saldada
+            if (estado === 'pagada') extra.pagado_en = form.pagado_en || new Date().toISOString();
             const base = {
                 tipo: esCashea ? 'por_pagar' : form.tipo, descripcion: (form.descripcion || '').trim() || 'Sin descripción',
                 contraparte: (form.contraparte || '').trim(), moneda: form.moneda,
@@ -496,12 +574,14 @@ createApp({
                 : supa.from('deudas').insert(payload);
             let { error } = await run(p);
             // Reintento sin columnas nuevas si la base aún no las tiene
-            if (error && /recurrente|dia_pago|pagos_realizados|abonos|plan|inicial|cuotas|schema cache|column/i.test(error.message || '')) {
+            if (error && /recurrente|dia_pago|pagos_realizados|abonos|plan|inicial|cuotas|pagado_en|schema cache|column/i.test(error.message || '')) {
                 ({ error } = await run(base));
             }
             saving.value = false;
             if (error) return notify('Error al guardar: ' + error.message, 'error');
-            notify(form.id ? 'Deuda actualizada' : 'Deuda agregada', 'ok');
+            const editando = !!form.id;
+            notify(editando ? 'Deuda actualizada' : 'Deuda agregada', 'ok');
+            logEvent(editando ? 'deuda_edit' : 'deuda_add', base.descripcion, editando ? 'Deuda actualizada' : 'Nueva deuda registrada', montoNum, form.moneda);
             showForm.value = false;
             await loadDeudas();
         }
@@ -513,14 +593,16 @@ createApp({
                 const full = {
                     fecha_vencimiento: next, monto_abonado: 0,
                     pagos_realizados: (d.pagos_realizados || 0) + 1, notified_date: '',
-                    ultimo_pago: isoDate(todayMidnight()),
+                    ultimo_pago: isoDate(todayMidnight()), pagado_en: new Date().toISOString(),
                 };
                 let { error } = await supa.from('deudas').update(full).eq('id', d.id);
-                if (error && /pagos_realizados|ultimo_pago|column|schema cache/i.test(error.message || '')) {
+                if (error && /pagos_realizados|ultimo_pago|pagado_en|column|schema cache/i.test(error.message || '')) {
                     ({ error } = await supa.from('deudas').update({ fecha_vencimiento: next, monto_abonado: 0, notified_date: '' }).eq('id', d.id));
                 }
                 if (error) return notify('Error: ' + error.message, 'error');
-                notify('Cuota pagada ✓ Próximo cobro: ' + next, 'ok'); await loadDeudas();
+                notify('Cuota pagada ✓ Próximo cobro: ' + next, 'ok');
+                logEvent('mes', d.descripcion, 'Cuota mensual pagada · próximo cobro ' + next, d.monto, d.moneda);
+                await loadDeudas();
             } finally { busy.value = false; }
         }
         async function abonar(d) {
@@ -535,13 +617,17 @@ createApp({
             try {
                 const estado = (!d.recurrente && nuevo >= d.monto - 0.0001) ? 'pagada' : 'pendiente';
                 const abonos = Array.isArray(d.abonos) ? d.abonos.slice() : [];
-                abonos.push({ f: isoDate(todayMidnight()), m: monto });
-                let { error } = await supa.from('deudas').update({ monto_abonado: nuevo, estado, abonos }).eq('id', d.id);
-                if (error && /abonos|column|schema cache/i.test(error.message || '')) {
+                abonos.push({ f: isoDate(todayMidnight()), m: monto, t: new Date().toISOString() });
+                const payload = { monto_abonado: nuevo, estado, abonos };
+                if (estado === 'pagada') payload.pagado_en = new Date().toISOString();
+                let { error } = await supa.from('deudas').update(payload).eq('id', d.id);
+                if (error && /abonos|pagado_en|column|schema cache/i.test(error.message || '')) {
                     ({ error } = await supa.from('deudas').update({ monto_abonado: nuevo, estado }).eq('id', d.id));
                 }
                 if (error) return notify('Error: ' + error.message, 'error');
-                notify('Abono registrado ✓', 'ok'); await loadDeudas();
+                notify('Abono registrado ✓', 'ok');
+                logEvent('abono', d.descripcion, estado === 'pagada' ? 'Abono · deuda saldada' : 'Abono parcial', monto, d.moneda);
+                await loadDeudas();
             } finally { busy.value = false; }
         }
         // Gestión de abonos dentro del modal (se guarda al pulsar "Guardar cambios")
@@ -550,7 +636,7 @@ createApp({
             if (v === null) return;
             const m = parseFloat(v); if (!(m > 0)) return notify('Monto inválido', 'error');
             if (!Array.isArray(form.abonos)) form.abonos = [];
-            form.abonos.push({ f: isoDate(todayMidnight()), m });
+            form.abonos.push({ f: isoDate(todayMidnight()), m, t: new Date().toISOString() });
             form.monto_abonado = Math.max(0, (Number(form.monto_abonado) || 0) + m);
         }
         function delAbonoForm(i) {
@@ -588,9 +674,17 @@ createApp({
             if (d.recurrente && d.estado !== 'pagada') return pagarMes(d);
             if (busy.value) return; busy.value = true;
             try {
-                const upd = d.estado === 'pagada' ? { estado: 'pendiente' } : { estado: 'pagada', monto_abonado: d.monto };
-                const { error } = await supa.from('deudas').update(upd).eq('id', d.id);
+                const marcarPagada = d.estado !== 'pagada';
+                const upd = marcarPagada
+                    ? { estado: 'pagada', monto_abonado: d.monto, pagado_en: new Date().toISOString() }
+                    : { estado: 'pendiente', pagado_en: null };
+                let { error } = await supa.from('deudas').update(upd).eq('id', d.id);
+                if (error && /pagado_en|column|schema cache/i.test(error.message || '')) {
+                    ({ error } = await supa.from('deudas').update(marcarPagada ? { estado: 'pagada', monto_abonado: d.monto } : { estado: 'pendiente' }).eq('id', d.id));
+                }
                 if (error) return notify('Error: ' + error.message, 'error');
+                if (marcarPagada) logEvent('pago', d.descripcion, 'Marcada como pagada', d.monto, d.moneda);
+                else logEvent('pago_undo', d.descripcion, 'Reabierta como pendiente');
                 await loadDeudas();
             } finally { busy.value = false; }
         }
@@ -600,7 +694,9 @@ createApp({
             try {
                 const { error } = await supa.from('deudas').delete().eq('id', d.id);
                 if (error) return notify('Error: ' + error.message, 'error');
-                notify('Deuda eliminada'); await loadDeudas();
+                notify('Deuda eliminada');
+                logEvent('deuda_del', d.descripcion, 'Deuda eliminada', saldo(d), d.moneda);
+                await loadDeudas();
             } finally { busy.value = false; }
         }
 
@@ -779,6 +875,7 @@ createApp({
             tasas: 'Tasas de cambio para las conversiones',
             gastos: 'Calendario de pagos y registro de gastos reales', metas: 'Ahorra con proyección de rendimiento',
             calc: 'Convierte y simula compras, deudas y crédito', ajustes: 'Estado del sistema, respaldos y sincronización',
+            bitacora: 'Historial detallado de toda tu actividad',
         }[currentView.value] || ''));
 
         /* ---------- Planificador ---------- */
@@ -1147,7 +1244,9 @@ createApp({
             else ({ error } = await supa.from('metas').insert(p));
             savingMeta.value = false;
             if (error) return notify('Error: ' + error.message, 'error');
-            notify(metaForm.id ? 'Meta actualizada' : 'Meta creada', 'ok'); showMetaForm.value = false; await loadMetas();
+            notify(metaForm.id ? 'Meta actualizada' : 'Meta creada', 'ok');
+            logEvent('meta_add', p.nombre, metaForm.id ? 'Meta actualizada' : 'Meta creada', p.objetivo, p.moneda);
+            showMetaForm.value = false; await loadMetas();
         }
         async function aportarMeta(m) {
             const v = prompt('¿Cuánto agregas a "' + m.nombre + '"? (' + symOf(m.moneda) + ')');
@@ -1159,7 +1258,9 @@ createApp({
                 movs.push({ f: isoDate(todayMidnight()), m: monto });
                 const { error } = await supa.from('metas').update({ ahorrado: Number(m.ahorrado) + monto, movimientos: movs }).eq('id', m.id);
                 if (error) return notify('Error: ' + error.message, 'error');
-                notify('Aporte registrado ✓', 'ok'); await loadMetas();
+                notify('Aporte registrado ✓', 'ok');
+                logEvent('aporte', m.nombre, 'Aporte a la meta', monto, m.moneda);
+                await loadMetas();
             } finally { busy.value = false; }
         }
         async function quitarAporte(m) {
@@ -1173,7 +1274,9 @@ createApp({
                 movs.push({ f: isoDate(todayMidnight()), m: -Math.min(monto, Number(m.ahorrado)) });
                 const { error } = await supa.from('metas').update({ ahorrado: nuevo, movimientos: movs }).eq('id', m.id);
                 if (error) return notify('Error: ' + error.message, 'error');
-                notify('Retiro registrado', 'ok'); await loadMetas();
+                notify('Retiro registrado', 'ok');
+                logEvent('retiro', m.nombre, 'Retiro de la meta', monto, m.moneda);
+                await loadMetas();
             } finally { busy.value = false; }
         }
         async function delMeta(m) {
@@ -1182,7 +1285,9 @@ createApp({
             try {
                 const { error } = await supa.from('metas').delete().eq('id', m.id);
                 if (error) return notify('Error: ' + error.message, 'error');
-                notify('Meta eliminada'); await loadMetas();
+                notify('Meta eliminada');
+                logEvent('meta_del', m.nombre, 'Meta eliminada');
+                await loadMetas();
             } finally { busy.value = false; }
         }
         const addMonths = (n) => { const d = todayMidnight(); d.setMonth(d.getMonth() + n); return d; };
@@ -1438,7 +1543,9 @@ createApp({
             else ({ error } = await supa.from('gastos').insert(p));
             savingGasto.value = false;
             if (error) { if (missingGastos(error.message)) { gastosAvailable.value = false; return notify('Activa “Gastos reales” corriendo setup.sql', 'error'); } return notify('Error: ' + error.message, 'error'); }
-            notify(gastoForm.id ? 'Gasto actualizado' : 'Gasto agregado', 'ok'); showGastoForm.value = false; await loadGastos();
+            notify(gastoForm.id ? 'Gasto actualizado' : 'Gasto agregado', 'ok');
+            logEvent('gasto_add', p.descripcion || catInfo(p.categoria).label, gastoForm.id ? 'Gasto actualizado' : 'Gasto agregado', p.monto, p.moneda);
+            showGastoForm.value = false; await loadGastos();
         }
         async function delGasto(g) {
             if (!confirm('¿Eliminar este gasto?')) return;
@@ -1446,7 +1553,9 @@ createApp({
             try {
                 const { error } = await supa.from('gastos').delete().eq('id', g.id);
                 if (error) return notify('Error: ' + error.message, 'error');
-                notify('Gasto eliminado'); await loadGastos();
+                notify('Gasto eliminado');
+                logEvent('gasto_del', g.descripcion || catInfo(g.categoria).label, 'Gasto eliminado', g.monto, g.moneda);
+                await loadGastos();
             } finally { busy.value = false; }
         }
         const gastosRealMetrics = computed(() => {
@@ -1555,6 +1664,9 @@ createApp({
             planSheet, openPlanSheet, closePlanSheet, planMove, planRing,
             settingsTab, settingsSections, settingsGroups, settingsCur, isSetTab, openSetTab, backSetMenu,
             debtsOpen, debtsTab, debtGroups,
+            fmtDateTime, fmtTime,
+            bitacora, bitacoraFilter, bitacoraFilters, bitacoraGroups, bitaInfo, limpiarBitacora,
+            heatTip, heatEnter, heatLeave,
             suscripciones, pagarMes, LEAD_DIAS, subIcon, subLabel,
             health, runHealth, allGreen, checklist, profile, displayName, emailTesting, testEmail,
             COUNTRIES, AVATARS, localTime, paisNombre, paisFlag, paisTzLabel,
